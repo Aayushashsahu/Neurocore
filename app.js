@@ -1,283 +1,612 @@
+/**
+ * NEUROCORE — Adaptive Event-Driven Neuromorphic Computing Platform
+ * Main Frontend Application Controller (v2.0.0)
+ *
+ * Coordinates:
+ * - Single-page application navigation & responsive sidebar
+ * - Three.js 3D neural network visualizers (Hero & Simulation Lab)
+ * - SNN Simulation Engine (LIF neurons, event queue, adaptive policies)
+ * - Scientific canvas charts (Membrane potential, Spike raster, Activity)
+ * - Active synaptic event queue inspector
+ * - Performance Benchmark Lab (Grouped bar, Sparsity curve, Latency proxy, CSV export)
+ * - Interactive 5-layer architecture explorer
+ */
+
 (() => {
   'use strict';
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // DOM UTILITIES & CONSTANTS
+  // ─────────────────────────────────────────────────────────────────────────
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+
   const pageNames = {
-    overview: 'Overview', simulator: 'Simulation lab', benchmarks: 'Benchmark lab',
-    architecture: 'Architecture', hardware: 'Hardware', research: 'Research'
+    overview: 'Overview',
+    simulator: 'Simulation lab',
+    benchmarks: 'Benchmark lab',
+    architecture: 'Architecture',
+    hardware: 'Hardware',
+    research: 'Research',
   };
-  let toastTimer;
+
+  let toastTimer = null;
   function toast(message) {
     const el = $('#toast');
+    if (!el) return;
     el.textContent = message;
     el.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // NAVIGATION & VIEW SWITCHING
+  // ─────────────────────────────────────────────────────────────────────────
+  let currentPage = 'overview';
 
   function navigate(page) {
     if (!pageNames[page]) return;
+    currentPage = page;
+
+    // Toggle active pages & sidebar buttons
     $$('.page').forEach(el => el.classList.toggle('active', el.id === `page-${page}`));
     $$('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.page === page));
     $('#currentSection').textContent = pageNames[page];
     $('#sidebar').classList.remove('open');
     window.location.hash = page;
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-  $$('.nav-item').forEach(button => button.addEventListener('click', () => navigate(button.dataset.page)));
-  $$('[data-goto]').forEach(button => button.addEventListener('click', () => navigate(button.dataset.goto)));
-  $('#mobileMenu').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
 
-  // About modal
+    // Page-specific initialization & resize hooks
+    if (page === 'overview') {
+      initHero3D();
+    } else if (page === 'simulator') {
+      initSim3D();
+      resizeSimCharts();
+    } else if (page === 'benchmarks') {
+      updateBenchmarks();
+      resizeBenchmarkCharts();
+    } else if (page === 'architecture') {
+      initArchitectureDiagram();
+    }
+  }
+
+  $$('.nav-item').forEach(btn => btn.addEventListener('click', () => navigate(btn.dataset.page)));
+  $$('[data-goto]').forEach(btn => btn.addEventListener('click', () => navigate(btn.dataset.goto)));
+  $('#mobileMenu')?.addEventListener('click', () => $('#sidebar').classList.toggle('open'));
+
+  // About modal handlers
   const modal = $('#infoModal');
-  $('#infoButton').addEventListener('click', () => modal.classList.add('open'));
-  $('#closeModal').addEventListener('click', () => modal.classList.remove('open'));
-  $('#modalOkay').addEventListener('click', () => modal.classList.remove('open'));
-  modal.addEventListener('click', event => { if (event.target === modal) modal.classList.remove('open'); });
+  $('#infoButton')?.addEventListener('click', () => modal?.classList.add('open'));
+  $('#closeModal')?.addEventListener('click', () => modal?.classList.remove('open'));
+  $('#modalOkay')?.addEventListener('click', () => modal?.classList.remove('open'));
+  modal?.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('open'); });
 
-  // ---- Simulation playground ----
-  const canvas = $('#networkCanvas');
-  const ctx = canvas.getContext('2d');
-  const sim = {
-    nodeCount: 48, sparsity: 70, threshold: 0.65, steps: 30, mode: 'event',
-    adaptiveThreshold: false, adaptiveTemporal: false, running: false,
-    nodes: [], edges: [], frame: 0, lastResult: null
-  };
-  const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
-  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+  // ─────────────────────────────────────────────────────────────────────────
+  // 3D VISUALIZATION CONTROLLER (THREE.JS)
+  // ─────────────────────────────────────────────────────────────────────────
+  let hero3DInitialized = false;
+  let sim3DInitialized = false;
+  let heroRetries = 0;
+  let simRetries = 0;
 
-  function resizeCanvas() {
-    const rect = canvas.getBoundingClientRect();
-    const ratio = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = Math.round(rect.width * ratio);
-    canvas.height = Math.round(rect.height * ratio);
-    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    drawNetwork();
+  function initHero3D() {
+    const container = $('#hero-three-container');
+    if (!container || hero3DInitialized) return;
+    if (window.NeuroViz && typeof window.NeuroViz.initHeroViz === 'function') {
+      window.NeuroViz.initHeroViz(container);
+      hero3DInitialized = true;
+    } else if (heroRetries < 25) {
+      heroRetries++;
+      setTimeout(initHero3D, 120);
+    }
   }
 
-  function createNetwork(count) {
-    const rect = canvas.getBoundingClientRect();
-    const width = Math.max(320, rect.width || 640);
-    const height = Math.max(200, rect.height || 310);
-    const cols = Math.ceil(Math.sqrt(count * 1.55));
-    const rows = Math.ceil(count / cols);
-    const nodes = [];
-    for (let i = 0; i < count; i++) {
-      const row = Math.floor(i / cols), col = i % cols;
-      const jitterX = Math.sin(i * 12.9898) * 8;
-      const jitterY = Math.cos(i * 7.233) * 7;
-      const marginX = 44, marginY = 38;
-      const usableW = Math.max(180, width - marginX * 2);
-      const usableH = Math.max(100, height - marginY * 2);
-      nodes.push({
-        id: i, x: marginX + (cols === 1 ? .5 : col / (cols - 1)) * usableW + jitterX,
-        y: marginY + (rows === 1 ? .5 : row / (rows - 1)) * usableH + jitterY,
-        v: 0, fired: 0, active: 0, incoming: 0
+  function initSim3D() {
+    const container = $('#sim-three-container');
+    if (!container || sim3DInitialized) return;
+    if (window.NeuroViz && typeof window.NeuroViz.initSimViz === 'function') {
+      window.NeuroViz.initSimViz(container);
+      sim3DInitialized = true;
+    } else if (simRetries < 25) {
+      simRetries++;
+      setTimeout(initSim3D, 120);
+    }
+  }
+
+  window.addEventListener('neuroviz-ready', () => {
+    if (currentPage === 'overview') initHero3D();
+    else if (currentPage === 'simulator') initSim3D();
+  });
+
+  $('#resetSimCamera')?.addEventListener('click', () => {
+    if (window.NeuroViz && typeof window.NeuroViz.resetCamera === 'function') {
+      window.NeuroViz.resetCamera();
+      toast('3D camera view reset.');
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // SNN SIMULATION ENGINE & SCIENTIFIC CHARTS
+  // ─────────────────────────────────────────────────────────────────────────
+  let simEngine = null;
+  let membraneChart = null;
+  let rasterChart = null;
+  let activityChart = null;
+  let selectedNeuronId = 0;
+
+  // Simulation loop control
+  let isSimRunning = false;
+  let isSimPaused = false;
+  let simIntervalId = null;
+  let targetTotalSteps = 40;
+
+  // Configuration state
+  const simConfig = {
+    neuronCount: 48,
+    sparsity: 70,
+    threshold: 0.65,
+    steps: 40,
+    mode: 'event',
+    adaptiveThreshold: false,
+    adaptiveTemporal: false,
+    speedMultiplier: 1.0,
+  };
+
+  /**
+   * Initializes or re-configures the simulation engine and charts
+   */
+  function initSimulation() {
+    // Instantiate or reconfigure SimulationEngine
+    if (window.SimulationEngine) {
+      const engineOpts = {
+        neuronCount: simConfig.neuronCount,
+        inputSparsity: simConfig.sparsity / 100,
+        firingThreshold: simConfig.threshold,
+        executionMode: simConfig.mode,
+        adaptiveThreshold: simConfig.adaptiveThreshold,
+        adaptiveTemporal: simConfig.adaptiveTemporal,
+      };
+      simEngine = new window.SimulationEngine(engineOpts);
+      simEngine.init(engineOpts);
+    }
+
+    // Initialize scientific charts if not already created
+    if (window.NeuroCharts) {
+      const mCanvas = $('#membraneChartCanvas');
+      if (mCanvas && !membraneChart) {
+        membraneChart = new window.NeuroCharts.MembranePotentialChart(mCanvas, { windowSize: 45 });
+      }
+      const rCanvas = $('#rasterChartCanvas');
+      if (rCanvas && !rasterChart) {
+        rasterChart = new window.NeuroCharts.RasterPlotChart(rCanvas, { windowSize: 45 });
+      }
+      const aCanvas = $('#activityChartCanvas');
+      if (aCanvas && !activityChart) {
+        activityChart = new window.NeuroCharts.SpikeActivityChart(aCanvas, { windowSize: 45 });
+      }
+    }
+
+    populateNeuronSelector();
+    updateSimModeBadge();
+    resetSimUIState();
+  }
+
+  function populateNeuronSelector() {
+    const sel = $('#membraneNeuronSelect');
+    if (!sel) return;
+    sel.innerHTML = '';
+    for (let i = 0; i < simConfig.neuronCount; i++) {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = `Neuron ${String(i).padStart(2, '0')}`;
+      if (i === selectedNeuronId) opt.selected = true;
+      sel.appendChild(opt);
+    }
+  }
+
+  $('#membraneNeuronSelect')?.addEventListener('change', e => {
+    selectedNeuronId = parseInt(e.target.value, 10) || 0;
+    if (membraneChart) {
+      membraneChart.setNeuronId(selectedNeuronId);
+      refreshChartsFromEngine();
+    }
+  });
+
+  function updateSimModeBadge() {
+    const badge = $('#simModeBadge');
+    if (badge) {
+      badge.textContent = `MODE: ${simConfig.mode === 'event' ? 'EVENT-DRIVEN' : 'TIME-STEPPED'}`;
+    }
+  }
+
+  function resizeSimCharts() {
+    membraneChart?.resize();
+    rasterChart?.resize();
+    activityChart?.resize();
+  }
+
+  function syncControlOutputs() {
+    $('#neuronCountOut').textContent = `${simConfig.neuronCount} neurons`;
+    $('#sparsityOut').textContent = `${simConfig.sparsity}%`;
+    $('#thresholdOut').textContent = Number(simConfig.threshold).toFixed(2);
+    $('#stepsOut').textContent = `${simConfig.steps} steps`;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // SIMULATION PLAYBACK & STEPPING LOGIC
+  // ─────────────────────────────────────────────────────────────────────────
+
+  function getStepDelayMs() {
+    const baseDelay = 55; // ms
+    return Math.max(8, Math.round(baseDelay / simConfig.speedMultiplier));
+  }
+
+  function updatePlaybackButtons(running, paused) {
+    const runBtn = $('#runSimulation');
+    const pauseBtn = $('#pauseSimulation');
+    const resumeBtn = $('#resumeSimulation');
+    const stepBtn = $('#stepSimulation');
+
+    if (runBtn) runBtn.disabled = running && !paused;
+    if (pauseBtn) pauseBtn.disabled = !running || paused;
+    if (resumeBtn) resumeBtn.disabled = !running || !paused;
+    if (stepBtn) stepBtn.disabled = running && !paused;
+
+    if (running && !paused) {
+      runBtn.innerHTML = '<span class="run-icon">◌</span> Simulating…';
+    } else {
+      runBtn.innerHTML = '<span class="run-icon">▶</span> Run simulation <span class="button-shortcut">↵</span>';
+    }
+  }
+
+  /**
+   * Executes a single simulation step and refreshes all visualizers
+   */
+  function executeSimulationStep() {
+    if (!simEngine) return false;
+
+    const stepResult = simEngine.step();
+    const state = simEngine.getState();
+
+    // 1. Update 3D Neural Mesh
+    if (window.NeuroViz && typeof window.NeuroViz.updateSimViz === 'function') {
+      window.NeuroViz.updateSimViz({
+        potentials: state.potentials,
+        spiked: state.spiked,
+        active: state.active,
       });
     }
-    const edges = [];
-    nodes.forEach(node => {
-      const candidates = nodes.filter(other => other.id !== node.id && other.id < node.id && Math.hypot(other.x - node.x, other.y - node.y) < Math.min(width, height) * .43);
-      candidates.sort((a, b) => Math.hypot(a.x - node.x, a.y - node.y) - Math.hypot(b.x - node.x, b.y - node.y));
-      candidates.slice(0, 2 + (node.id % 2)).forEach(source => edges.push({ from: source.id, to: node.id }));
-    });
-    sim.nodes = nodes;
-    sim.edges = edges;
-    drawNetwork();
-  }
 
-  function drawNetwork() {
-    if (!ctx) return;
-    const rect = canvas.getBoundingClientRect();
-    const w = rect.width, h = rect.height;
-    if (!w || !h) return;
-    ctx.clearRect(0, 0, w, h);
-    // Synaptic connections
-    ctx.lineWidth = 0.75;
-    sim.edges.forEach(edge => {
-      const a = sim.nodes[edge.from], b = sim.nodes[edge.to];
-      if (!a || !b) return;
-      const lit = a.active > 0 && b.active > 0;
-      ctx.strokeStyle = lit ? 'rgba(91,224,218,.52)' : 'rgba(74,111,144,.18)';
-      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-    });
-    // Neurons
-    sim.nodes.forEach(node => {
-      const active = node.active > 0;
-      const r = active ? 4.2 : 2.9;
-      if (active) {
-        const glow = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, 15);
-        glow.addColorStop(0, 'rgba(87,230,222,.33)');
-        glow.addColorStop(1, 'rgba(87,230,222,0)');
-        ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(node.x, node.y, 15, 0, Math.PI * 2); ctx.fill();
+    // 2. Update Membrane Potential Chart
+    if (membraneChart) {
+      const neuronHistory = state.membranePotentialHistory[selectedNeuronId] || [];
+      const neuronSpikeTimes = (state.spikeRaster[selectedNeuronId] || []).filter(t => t <= state.step);
+      membraneChart.update({
+        potentials: neuronHistory,
+        threshold: simConfig.threshold,
+        resetVoltage: 0.0,
+        spikeTimes: neuronSpikeTimes,
+        currentStep: state.step,
+      });
+    }
+
+    // 3. Update Spike Raster Plot
+    if (rasterChart) {
+      const rasterMap = new Map();
+      for (const [idStr, times] of Object.entries(state.spikeRaster)) {
+        rasterMap.set(parseInt(idStr, 10), times);
       }
-      ctx.fillStyle = active ? '#8ff8ed' : '#415c78';
-      ctx.strokeStyle = active ? '#b9ffff' : '#66839e';
-      ctx.lineWidth = active ? 1.2 : .65;
-      ctx.beginPath(); ctx.arc(node.x, node.y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    });
+      rasterChart.update({
+        spikeRaster: rasterMap,
+        neuronCount: simConfig.neuronCount,
+        currentStep: state.step,
+      });
+      $('#rasterSpikeCount').textContent = `${state.spikeCount} SPIKES`;
+    }
+
+    // 4. Update Spike Activity & Frequency Chart
+    if (activityChart) {
+      activityChart.update({
+        spikeFrequency: state.spikeFrequency,
+        totalSpikes: state.spikeCount,
+        activeCount: state.activeCount,
+        inactiveCount: state.inactiveCount,
+        currentStep: state.step,
+      });
+      const recentRate = state.spikeFrequency.length > 0 ? state.spikeFrequency[state.spikeFrequency.length - 1] : 0;
+      $('#activityRate').textContent = `${recentRate} SPIKES/STEP`;
+    }
+
+    // 5. Update KPI Cards
+    const totalOps = simConfig.neuronCount * Math.max(1, state.step);
+    const densityPct = totalOps > 0 ? (state.updateCount / totalOps) * 100 : 0;
+    $('#spikesMetric').textContent = state.spikeCount.toLocaleString();
+    $('#updatesMetric').textContent = state.updateCount.toLocaleString();
+    $('#activeMetric').textContent = state.activeCount.toLocaleString();
+    $('#densityMetric').textContent = `${densityPct.toFixed(1)}%`;
+
+    // 6. Update Frame and Status
+    $('#networkFrame').textContent = `STEP ${String(state.step).padStart(2, '0')}`;
+    $('#networkStatus').textContent = `${state.spiked.length} spikes in step ${state.step}`;
+
+    // 7. Update Event Queue Visualization
+    updateEventQueueUI();
+
+    // 8. Log Events for Salient Timesteps
+    if (state.step === 1 || state.spiked.length > 0 || state.step === targetTotalSteps) {
+      const label = state.step === 1 ? 'START' : state.spiked.length > 0 ? 'SPIKE' : 'STEP';
+      const msg = state.spiked.length > 0
+        ? `${state.spiked.length} neuron(s) fired: [${state.spiked.slice(0, 5).join(', ')}${state.spiked.length > 5 ? '…' : ''}]`
+        : `Step ${state.step} evaluated`;
+      addLog(state.step, label, msg);
+    }
+
+    return state.step < targetTotalSteps;
   }
 
-  function syncControls() {
-    $('#neuronCountOut').textContent = `${sim.nodeCount} neurons`;
-    $('#sparsityOut').textContent = `${sim.sparsity}%`;
-    $('#thresholdOut').textContent = (sim.threshold).toFixed(2);
-    $('#stepsOut').textContent = `${sim.steps} steps`;
+  function refreshChartsFromEngine() {
+    if (!simEngine) return;
+    const state = simEngine.getState();
+    if (membraneChart) {
+      const neuronHistory = state.membranePotentialHistory[selectedNeuronId] || [];
+      const neuronSpikeTimes = (state.spikeRaster[selectedNeuronId] || []).filter(t => t <= state.step);
+      membraneChart.update({
+        potentials: neuronHistory,
+        threshold: simConfig.threshold,
+        resetVoltage: 0.0,
+        spikeTimes: neuronSpikeTimes,
+        currentStep: state.step,
+      });
+    }
   }
-  $('#neuronCount').addEventListener('input', e => { sim.nodeCount = +e.target.value; syncControls(); createNetwork(sim.nodeCount); });
-  $('#inputSparsity').addEventListener('input', e => { sim.sparsity = +e.target.value; syncControls(); });
-  $('#firingThreshold').addEventListener('input', e => { sim.threshold = +e.target.value / 100; syncControls(); });
-  $('#simulationSteps').addEventListener('input', e => { sim.steps = +e.target.value; syncControls(); });
-  $$('#executionMode button').forEach(button => button.addEventListener('click', () => {
-    sim.mode = button.dataset.mode;
-    $$('#executionMode button').forEach(b => b.classList.toggle('selected', b === button));
-  }));
-  $('#adaptiveThreshold').addEventListener('change', e => sim.adaptiveThreshold = e.target.checked);
-  $('#adaptiveTemporal').addEventListener('change', e => sim.adaptiveTemporal = e.target.checked);
+
+  function updateEventQueueUI() {
+    const tbody = $('#eventQueueBody');
+    const badge = $('#queueLengthTag');
+    if (!tbody || !simEngine) return;
+
+    const rawQueue = simEngine.eventQueue ? (simEngine.eventQueue.events || []) : [];
+    badge.textContent = `${rawQueue.length} EVENTS IN QUEUE`;
+
+    if (rawQueue.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-table">No pending synaptic events in queue</td></tr>';
+      return;
+    }
+
+    const rows = rawQueue.slice(0, 12).map(ev => {
+      const due = ev.deliveryStep ?? ev.time ?? 0;
+      const src = ev.sourceId ?? ev.src ?? '—';
+      const tgt = ev.targetId ?? ev.target ?? '—';
+      const wt = typeof ev.weight === 'number' ? ev.weight.toFixed(3) : '0.250';
+      const status = due <= (simEngine.currentStep || 0) ? '<span style="color:var(--cyan)">DUE NOW</span>' : 'SCHEDULED';
+      return `<tr>
+        <td>T+${due}</td>
+        <td>Neuron ${src}</td>
+        <td>Neuron ${tgt}</td>
+        <td>${wt}</td>
+        <td>${status}</td>
+      </tr>`;
+    });
+
+    tbody.innerHTML = rows.join('');
+  }
+
+  function startSimulationLoop() {
+    if (isSimRunning && !isSimPaused) return;
+
+    if (!isSimPaused) {
+      // Starting from scratch
+      targetTotalSteps = simConfig.steps;
+      initSimulation();
+      $('#canvasPlaceholder')?.classList.add('hidden');
+      $('#eventLog').innerHTML = '';
+      $('#logCount').textContent = '0 EVENTS';
+      addLog(0, 'INIT', `${simConfig.neuronCount} LIF neurons · ${simConfig.mode.toUpperCase()} mode`);
+      addLog(0, 'CONFIG', `Vth=${simConfig.threshold.toFixed(2)}, Sparsity=${simConfig.sparsity}%`);
+    }
+
+    isSimRunning = true;
+    isSimPaused = false;
+    updatePlaybackButtons(true, false);
+
+    function loop() {
+      if (!isSimRunning || isSimPaused) return;
+      const hasMore = executeSimulationStep();
+      if (hasMore) {
+        simIntervalId = setTimeout(loop, getStepDelayMs());
+      } else {
+        // Simulation finished
+        isSimRunning = false;
+        isSimPaused = false;
+        updatePlaybackButtons(false, false);
+        $('#networkStatus').textContent = 'Simulation complete';
+        addLog(targetTotalSteps, 'DONE', 'Simulation completed successfully.');
+        toast('Simulation completed.');
+      }
+    }
+
+    simIntervalId = setTimeout(loop, getStepDelayMs());
+  }
+
+  function pauseSimulation() {
+    if (!isSimRunning || isSimPaused) return;
+    clearTimeout(simIntervalId);
+    isSimPaused = true;
+    updatePlaybackButtons(true, true);
+    $('#networkStatus').textContent = 'Simulation paused';
+    toast('Simulation paused.');
+  }
+
+  function resumeSimulation() {
+    if (!isSimRunning || !isSimPaused) return;
+    $('#networkStatus').textContent = 'Simulation resumed';
+    toast('Simulation resumed.');
+    startSimulationLoop();
+  }
+
+  function stepSimulationOnce() {
+    if (isSimRunning && !isSimPaused) {
+      pauseSimulation();
+    }
+    if (!simEngine || simEngine.currentStep === 0) {
+      initSimulation();
+      $('#canvasPlaceholder')?.classList.add('hidden');
+    }
+    executeSimulationStep();
+    toast('Stepped 1 interval.');
+  }
+
+  function resetSimUIState() {
+    clearTimeout(simIntervalId);
+    isSimRunning = false;
+    isSimPaused = false;
+    updatePlaybackButtons(false, false);
+
+    $('#networkStatus').textContent = 'Awaiting execution';
+    $('#networkFrame').textContent = 'STEP 00';
+    ['#spikesMetric', '#updatesMetric', '#activeMetric', '#densityMetric'].forEach(sel => {
+      const el = $(sel);
+      if (el) el.textContent = '—';
+    });
+
+    membraneChart?.clear();
+    rasterChart?.clear();
+    activityChart?.clear();
+
+    const tbody = $('#eventQueueBody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="empty-table">No pending synaptic events. Run or step simulation to observe queue activity.</td></tr>';
+    $('#queueLengthTag').textContent = '0 EVENTS IN QUEUE';
+  }
 
   function addLog(time, type, message) {
     const log = $('#eventLog');
+    if (!log) return;
     const empty = $('.empty-log', log);
     if (empty) empty.remove();
+
     const row = document.createElement('div');
     row.className = 'log-entry';
-    const timeEl = document.createElement('span'); timeEl.className = 'log-time'; timeEl.textContent = `T+${String(time).padStart(2, '0')}`;
-    const typeEl = document.createElement('span'); typeEl.className = 'log-type'; typeEl.textContent = type;
-    const msgEl = document.createElement('span'); msgEl.className = 'log-message'; msgEl.textContent = message;
-    row.append(timeEl, typeEl, msgEl);
-    log.append(row);
-    while (log.children.length > 28) log.removeChild(log.firstElementChild);
+    row.innerHTML = `<span class="log-time">T+${String(time).padStart(2, '0')}</span><span class="log-type">${type}</span><span class="log-message">${message}</span>`;
+    log.appendChild(row);
+
+    while (log.children.length > 30) {
+      log.removeChild(log.firstElementChild);
+    }
     $('#logCount').textContent = `${log.children.length} EVENTS`;
     log.scrollTop = log.scrollHeight;
   }
 
-  function updateMetrics(result) {
-    $('#spikesMetric').textContent = result.spikes.toLocaleString();
-    $('#updatesMetric').textContent = result.updates.toLocaleString();
-    $('#activeMetric').textContent = result.active.toLocaleString();
-    $('#densityMetric').textContent = `${result.density.toFixed(1)}%`;
-  }
+  // Event Listeners for Simulation Controls
+  $('#neuronCount')?.addEventListener('input', e => {
+    simConfig.neuronCount = parseInt(e.target.value, 10);
+    syncControlOutputs();
+    initSimulation();
+  });
 
-  async function runSimulation() {
-    if (sim.running) return;
-    sim.running = true;
-    const runButton = $('#runSimulation');
-    runButton.disabled = true;
-    runButton.innerHTML = '<span class="run-icon">◌</span> Simulating…';
-    $('#eventLog').innerHTML = '';
-    $('#logCount').textContent = '0 EVENTS';
-    $('#canvasPlaceholder').classList.add('hidden');
-    sim.nodes.forEach(n => { n.v = Math.random() * .15; n.fired = 0; n.active = 0; n.incoming = 0; });
-    const queue = [];
-    let spikes = 0, updates = 0, inputEvents = 0, maxThreshold = sim.threshold;
-    const firedSet = new Set();
-    const baseInputProb = (1 - sim.sparsity / 100) * .48;
-    // Under low activity, the demo groups adjacent input steps into wider temporal bins.
-    const temporalBin = sim.adaptiveTemporal && sim.sparsity >= 65 ? 2 : 1;
-    const effectiveSteps = Math.ceil(sim.steps / temporalBin);
-    const delay = 42;
-    addLog(0, 'INIT', `${sim.nodeCount} LIF neurons · ${sim.steps} requested steps`);
-    addLog(0, 'CONFIG', `${sim.mode === 'event' ? 'Event-driven' : 'Time-stepped'} mode · ${(sim.threshold).toFixed(2)} threshold`);
-    if (temporalBin > 1) addLog(0, 'ADAPT', `Low-activity input grouped into ${temporalBin}-step temporal bins`);
+  $('#inputSparsity')?.addEventListener('input', e => {
+    simConfig.sparsity = parseInt(e.target.value, 10);
+    syncControlOutputs();
+    if (simEngine && simEngine.config) simEngine.config.inputSparsity = simConfig.sparsity / 100;
+  });
 
-    for (let stepIndex = 0; stepIndex < effectiveSteps; stepIndex++) {
-      const t = stepIndex * temporalBin;
-      sim.frame = Math.min(sim.steps, t + temporalBin);
-      sim.nodes.forEach(n => { n.active = Math.max(0, n.active - 1); });
-      const external = [];
-      const binnedInputProb = 1 - Math.pow(1 - baseInputProb, temporalBin);
-      for (let i = 0; i < sim.nodeCount; i++) if (Math.random() < binnedInputProb) external.push(i);
-      inputEvents += external.length;
-      const due = queue.filter(ev => ev.time <= stepIndex);
-      for (let i = queue.length - 1; i >= 0; i--) if (queue[i].time <= stepIndex) queue.splice(i, 1);
-      due.forEach(ev => { if (sim.nodes[ev.target]) sim.nodes[ev.target].incoming += ev.weight; });
-      external.forEach(id => { sim.nodes[id].incoming += .35 + Math.random() * .45; });
-
-      let threshold = sim.threshold;
-      const activityRatio = external.length / sim.nodeCount;
-      if (sim.adaptiveThreshold) {
-        threshold = clamp(sim.threshold + (activityRatio > .16 ? .12 : activityRatio < .06 ? -.08 : 0), .2, 1.1);
-        maxThreshold = threshold;
-      }
-      const touched = sim.mode === 'clock'
-        ? sim.nodes
-        : sim.nodes.filter(n => n.incoming > 0 || n.v >= threshold * .82);
-      updates += touched.length;
-      const firedNow = [];
-      touched.forEach(node => {
-        // Discrete LIF update: membrane leak + incoming synaptic current.
-        node.v = Math.max(0, node.v * .78 + node.incoming);
-        node.incoming = 0;
-        if (node.v >= threshold) {
-          node.v = 0;
-          node.fired++;
-          node.active = 3;
-          firedNow.push(node.id);
-          firedSet.add(node.id);
-        }
-      });
-      spikes += firedNow.length;
-      // Schedule outgoing synaptic events from newly firing neurons.
-      firedNow.forEach(id => {
-        sim.edges.filter(edge => edge.from === id).forEach(edge => {
-          queue.push({ time: stepIndex + 1 + (edge.to % 3 === 0 ? 1 : 0), target: edge.to, weight: .18 + (edge.to % 4) * .035 });
-        });
-      });
-      if (stepIndex === 0 || firedNow.length > 0 || stepIndex === effectiveSteps - 1) {
-        const label = stepIndex === 0 ? 'INPUT' : firedNow.length ? 'SPIKE' : 'STEP';
-        const message = stepIndex === 0 ? `${external.length} input events received` : firedNow.length ? `${firedNow.length} neuron(s) crossed threshold` : 'Final state update';
-        addLog(Math.min(sim.steps, t + temporalBin), label, message);
-      }
-      $('#networkFrame').textContent = `FRAME ${String(Math.min(sim.steps, t + temporalBin)).padStart(2, '0')}`;
-      $('#networkStatus').textContent = `${firedNow.length} spikes in bin ${stepIndex + 1}`;
-      drawNetwork();
-      await sleep(delay);
+  $('#firingThreshold')?.addEventListener('input', e => {
+    simConfig.threshold = parseInt(e.target.value, 10) / 100;
+    syncControlOutputs();
+    if (simEngine && simEngine.config) {
+      simEngine.config.firingThreshold = simConfig.threshold;
+      simEngine._currentThreshold = simConfig.threshold;
     }
+  });
 
-    const totalOpportunities = sim.nodeCount * effectiveSteps;
-    const density = totalOpportunities ? (updates / totalOpportunities) * 100 : 0;
-    const result = { spikes, updates, active: firedSet.size, density, inputEvents, totalOpportunities, threshold: maxThreshold };
-    sim.lastResult = result;
-    updateMetrics(result);
-    addLog(sim.steps, 'DONE', `${spikes} spikes · ${updates.toLocaleString()} neuron updates`);
-    $('#networkStatus').textContent = 'Simulation complete';
-    runButton.disabled = false;
-    runButton.innerHTML = '<span class="run-icon">▶</span> Run simulation <span class="button-shortcut">↵</span>';
-    sim.running = false;
-    toast('Simulation completed. Results are shown above.');
-  }
+  $('#simulationSteps')?.addEventListener('input', e => {
+    simConfig.steps = parseInt(e.target.value, 10);
+    syncControlOutputs();
+  });
 
-  $('#runSimulation').addEventListener('click', runSimulation);
-  $('#clearSimulation').addEventListener('click', () => {
-    if (sim.running) return;
-    $('#eventLog').innerHTML = '<div class="empty-log"><span>⌁</span> Simulation events will appear here after execution.</div>';
+  $('#simSpeed')?.addEventListener('change', e => {
+    simConfig.speedMultiplier = parseFloat(e.target.value) || 1.0;
+  });
+
+  $$('#executionMode button').forEach(button => {
+    button.addEventListener('click', () => {
+      simConfig.mode = button.dataset.mode;
+      $$('#executionMode button').forEach(b => b.classList.toggle('selected', b === button));
+      updateSimModeBadge();
+      initSimulation();
+      toast(`Switched to ${simConfig.mode === 'event' ? 'Event-Driven' : 'Time-Stepped'} mode.`);
+    });
+  });
+
+  $('#adaptiveThreshold')?.addEventListener('change', e => {
+    simConfig.adaptiveThreshold = e.target.checked;
+    if (simEngine && simEngine.config) simEngine.config.adaptiveThreshold = e.target.checked;
+    toast(`Adaptive threshold ${e.target.checked ? 'enabled' : 'disabled'}.`);
+  });
+
+  $('#adaptiveTemporal')?.addEventListener('change', e => {
+    simConfig.adaptiveTemporal = e.target.checked;
+    if (simEngine && simEngine.config) simEngine.config.adaptiveTemporal = e.target.checked;
+    toast(`Adaptive temporal bins ${e.target.checked ? 'enabled' : 'disabled'}.`);
+  });
+
+  $('#runSimulation')?.addEventListener('click', startSimulationLoop);
+  $('#pauseSimulation')?.addEventListener('click', pauseSimulation);
+  $('#resumeSimulation')?.addEventListener('click', resumeSimulation);
+  $('#stepSimulation')?.addEventListener('click', stepSimulationOnce);
+  $('#resetSimBtn')?.addEventListener('click', () => {
+    initSimulation();
+    toast('Simulation reset.');
+  });
+
+  $('#clearSimulation')?.addEventListener('click', () => {
+    if (isSimRunning) pauseSimulation();
+    resetSimUIState();
+    $('#canvasPlaceholder')?.classList.remove('hidden');
+    $('#eventLog').innerHTML = '<div class="empty-log"><span>⌁</span> Simulation events will appear here during execution.</div>';
     $('#logCount').textContent = '0 EVENTS';
-    $('#canvasPlaceholder').classList.remove('hidden');
-    $('#networkStatus').textContent = 'Awaiting execution';
-    $('#networkFrame').textContent = 'FRAME —';
-    ['#spikesMetric', '#updatesMetric', '#activeMetric', '#densityMetric'].forEach(id => $(id).textContent = '—');
-    sim.nodes.forEach(n => { n.v = 0; n.active = 0; n.incoming = 0; });
-    drawNetwork();
-    toast('Visualisation cleared.');
-  });
-  $('#resetSim').addEventListener('click', () => {
-    if (sim.running) return;
-    $('#neuronCount').value = 48; $('#inputSparsity').value = 70; $('#firingThreshold').value = 65; $('#simulationSteps').value = 30;
-    $('#adaptiveThreshold').checked = false; $('#adaptiveTemporal').checked = false;
-    sim.nodeCount = 48; sim.sparsity = 70; sim.threshold = .65; sim.steps = 30; sim.mode = 'event'; sim.adaptiveThreshold = false; sim.adaptiveTemporal = false;
-    $$('#executionMode button').forEach(b => b.classList.toggle('selected', b.dataset.mode === 'event'));
-    syncControls(); createNetwork(sim.nodeCount);
-    $('#clearSimulation').click();
+    toast('Visualization cleared.');
   });
 
-  // ---- Benchmark illustration ----
-  function updateBenchmark() {
-    const sparsity = +$('#benchSparsity').value;
+  $('#resetSim')?.addEventListener('click', () => {
+    if (isSimRunning) pauseSimulation();
+    $('#neuronCount').value = 48;
+    $('#inputSparsity').value = 70;
+    $('#firingThreshold').value = 65;
+    $('#simulationSteps').value = 40;
+    $('#simSpeed').value = '1';
+    $('#adaptiveThreshold').checked = false;
+    $('#adaptiveTemporal').checked = false;
+
+    simConfig.neuronCount = 48;
+    simConfig.sparsity = 70;
+    simConfig.threshold = 0.65;
+    simConfig.steps = 40;
+    simConfig.mode = 'event';
+    simConfig.speedMultiplier = 1.0;
+    simConfig.adaptiveThreshold = false;
+    simConfig.adaptiveTemporal = false;
+
+    $$('#executionMode button').forEach(b => b.classList.toggle('selected', b.dataset.mode === 'event'));
+    syncControlOutputs();
+    initSimulation();
+    $('#clearSimulation')?.click();
+    toast('Settings reset to defaults.');
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // BENCHMARK LAB (CANVAS CHARTS & CSV EXPORT)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  function updateBenchmarks() {
+    const sparsitySlider = $('#benchSparsity');
+    const sparsity = sparsitySlider ? parseInt(sparsitySlider.value, 10) : 70;
     const workload = 10000;
     const activeShare = (100 - sparsity) / 100;
     const eventUpdates = Math.round(workload * activeShare);
-    const reduction = 100 - Math.round(eventUpdates / workload * 100);
+    const reduction = 100 - Math.round((eventUpdates / workload) * 100);
+
+    // Update KPI counters
     $('#benchSparsityOut').textContent = `${sparsity}%`;
     $('#benchWorkload').textContent = workload.toLocaleString();
     $('#benchEventUpdates').textContent = eventUpdates.toLocaleString();
@@ -285,19 +614,146 @@
     $('#benchSkipped').textContent = `${reduction}%`;
     $('#compareEvent').textContent = eventUpdates.toLocaleString();
     $('#modeledReduction').textContent = `${reduction}% fewer updates`;
-    $('#barEvent').style.height = `${Math.max(1, activeShare * 100)}%`;
-    $('#barEvent span').textContent = eventUpdates >= 1000 ? `${(eventUpdates / 1000).toFixed(eventUpdates % 1000 ? 1 : 0)}k` : String(eventUpdates);
-    $('#barAnn').style.height = '100%'; $('#barClock').style.height = '100%';
-    $('#barAnn span').textContent = '10k'; $('#barClock span').textContent = '10k';
-  }
-  $('#benchSparsity').addEventListener('input', updateBenchmark);
-  $('#refreshBench').addEventListener('click', () => { updateBenchmark(); toast('Illustrative workload counters recalculated.'); });
 
-  // Startup
-  syncControls();
-  resizeCanvas();
-  createNetwork(sim.nodeCount);
-  updateBenchmark();
-  window.addEventListener('resize', () => { resizeCanvas(); createNetwork(sim.nodeCount); });
-  if (window.location.hash && pageNames[window.location.hash.slice(1)]) navigate(window.location.hash.slice(1));
+    if (!window.NeuroCharts || !window.NeuroCharts.Benchmark) return;
+    const Bench = window.NeuroCharts.Benchmark;
+
+    // 1. Grouped Bar Chart (Neuron Updates, Synaptic Events, State Evaluations)
+    const groupedCanvas = $('#benchGroupedCanvas');
+    if (groupedCanvas) {
+      Bench.renderGroupedBar(groupedCanvas, {
+        groups: [
+          {
+            label: 'Neuron Updates',
+            ann: 10000,
+            clock: 10000,
+            event: eventUpdates,
+          },
+          {
+            label: 'Synaptic Events',
+            ann: 25000,
+            clock: 25000,
+            event: Math.round(25000 * activeShare * 0.88),
+          },
+          {
+            label: 'State Evals',
+            ann: 10000,
+            clock: 10000,
+            event: Math.round(eventUpdates * 1.08),
+          },
+        ],
+      });
+    }
+
+    // 2. Sparsity Curve Chart (0% to 95%)
+    const sparsityCanvas = $('#benchSparsityCanvas');
+    if (sparsityCanvas) {
+      const levels = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95];
+      const annCurve = levels.map(() => 10000);
+      const clockCurve = levels.map(() => 10000);
+      const eventCurve = levels.map(s => Math.round(10000 * ((100 - s) / 100)));
+
+      Bench.renderSparsityChart(sparsityCanvas, {
+        sparsityLevels: levels,
+        ann: annCurve,
+        clock: clockCurve,
+        event: eventCurve,
+      });
+    }
+
+    // 3. Latency Comparison Chart (Normalized Proxy Cycles)
+    const latencyCanvas = $('#benchLatencyCanvas');
+    if (latencyCanvas) {
+      // Model overhead: event queue overhead ~25 cycles, compute scales with activeShare
+      const eventLatency = Math.round(26 + activeShare * 68);
+      Bench.renderLatencyChart(latencyCanvas, {
+        ann: 100,
+        clock: 92,
+        event: eventLatency,
+      });
+    }
+  }
+
+  function resizeBenchmarkCharts() {
+    updateBenchmarks();
+  }
+
+  $('#benchSparsity')?.addEventListener('input', updateBenchmarks);
+  $('#refreshBench')?.addEventListener('click', () => {
+    updateBenchmarks();
+    toast('Benchmark metrics recalculated.');
+  });
+
+  $('#downloadBenchCSV')?.addEventListener('click', () => {
+    if (!window.NeuroCharts || !window.NeuroCharts.Benchmark) return;
+    const sparsitySlider = $('#benchSparsity');
+    const sparsity = sparsitySlider ? parseInt(sparsitySlider.value, 10) : 70;
+    const activeShare = (100 - sparsity) / 100;
+    const eventUpdates = Math.round(10000 * activeShare);
+
+    const benchmarkData = {
+      groups: [
+        { label: 'Neuron Updates', ann: 10000, clock: 10000, event: eventUpdates },
+        { label: 'Synaptic Events', ann: 25000, clock: 25000, event: Math.round(25000 * activeShare * 0.88) },
+        { label: 'State Evaluations', ann: 10000, clock: 10000, event: Math.round(eventUpdates * 1.08) },
+        { label: 'Modeled Relative Latency', ann: 100, clock: 92, event: Math.round(26 + activeShare * 68) },
+      ],
+    };
+
+    window.NeuroCharts.Benchmark.downloadCSV(benchmarkData, `neurocore-benchmark-sparsity-${sparsity}pct.csv`);
+    toast('Benchmark CSV downloaded.');
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // INTERACTIVE ARCHITECTURE DIAGRAM
+  // ─────────────────────────────────────────────────────────────────────────
+  let archDiagramMounted = false;
+
+  function initArchitectureDiagram() {
+    const container = $('#interactiveArchContainer');
+    if (!container || archDiagramMounted) return;
+    if (window.ArchitectureDiagram && typeof window.ArchitectureDiagram.init === 'function') {
+      window.ArchitectureDiagram.init(container);
+      archDiagramMounted = true;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // WINDOW RESIZE & LIFECYCLE
+  // ─────────────────────────────────────────────────────────────────────────
+  window.addEventListener('resize', () => {
+    if (currentPage === 'simulator') {
+      resizeSimCharts();
+    } else if (currentPage === 'benchmarks') {
+      resizeBenchmarkCharts();
+    }
+  });
+
+  // Initial startup sequence
+  document.addEventListener('DOMContentLoaded', () => {
+    syncControlOutputs();
+    initSimulation();
+    updateBenchmarks();
+
+    // Check URL hash for direct routing
+    const hash = window.location.hash ? window.location.hash.slice(1) : 'overview';
+    if (pageNames[hash]) {
+      navigate(hash);
+    } else {
+      navigate('overview');
+    }
+  });
+
+  // Fallback startup if DOMContentLoaded has already fired
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    syncControlOutputs();
+    initSimulation();
+    updateBenchmarks();
+    const hash = window.location.hash ? window.location.hash.slice(1) : 'overview';
+    if (pageNames[hash]) {
+      navigate(hash);
+    } else {
+      navigate('overview');
+    }
+  }
 })();

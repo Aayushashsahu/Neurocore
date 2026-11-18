@@ -3,13 +3,31 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#080d18" />
-  <meta name="description" content="NEUROCORE — Adaptive event-driven neuromorphic computing research platform." />
-  <title>NEUROCORE — Research Platform</title>
+  <meta name="theme-color" content="#070B14" />
+  <meta name="description" content="NEUROCORE — Adaptive Event-Driven Neuromorphic Computing Platform for Hardware-Aware Edge Intelligence." />
+  <title>NEUROCORE — Adaptive Event-Driven Neuromorphic Computing Platform</title>
+
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <!-- Stylesheet -->
   <link rel="stylesheet" href="styles.css" />
+
+  <!-- Importmap for Three.js & OrbitControls from unpkg CDN -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three-orbit-controls": "https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js"
+    }
+  }
+  </script>
 </head>
 <body>
   <div class="app-shell">
+    <!-- SIDEBAR NAVIGATION -->
     <aside class="sidebar" id="sidebar">
       <a class="brand" href="#overview" aria-label="NEUROCORE home">
         <span class="brand-mark"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M20 4 33 11.5v17L20 36 7 28.5v-17L20 4Z"/><path d="M13 14.5h14M13 20h14M13 25.5h9"/><circle cx="28" cy="25.5" r="2"/></svg></span>
@@ -34,11 +52,13 @@
           <div class="system-progress"><span></span></div>
           <div class="system-foot"><span>Prototype stage</span><span>01 / 04</span></div>
         </div>
-        <div class="sidebar-footer"><span>NEUROCORE v0.1.0</span><span>·</span><span>COLLEGE PROJECT</span></div>
+        <div class="sidebar-footer"><span>NEUROCORE v2.0.0</span><span>·</span><span>RESEARCH PLATFORM</span></div>
       </div>
     </aside>
 
+    <!-- MAIN CONTENT AREA -->
     <main class="main-content">
+      <!-- TOP BAR -->
       <header class="topbar">
         <div class="topbar-left">
           <button class="mobile-menu" id="mobileMenu" aria-label="Toggle menu">☰</button>
@@ -52,123 +72,858 @@
       </header>
 
       <div class="page-wrap">
-        <!-- OVERVIEW -->
+        <!-- ════════════════════════════════════════════════════════════════
+             PAGE 1: OVERVIEW / LANDING PAGE
+             ════════════════════════════════════════════════════════════════ -->
         <section class="page active" id="page-overview">
           <div class="page-heading">
-            <div><div class="eyebrow"><span class="eyebrow-line"></span> ADAPTIVE EDGE INTELLIGENCE</div><h1>Research <span>workspace.</span></h1><p class="page-subtitle">Explore event-driven spiking neural networks, adaptive computation and hardware-aware benchmarking.</p></div>
-            <div class="heading-actions"><span class="version-chip">BUILD 0.1.0</span><button class="btn btn-primary" data-goto="simulator"><span>Run a simulation</span><b>↗</b></button></div>
-          </div>
-
-          <div class="hero-panel">
-            <div class="hero-glow"></div><div class="hero-grid"></div>
-            <div class="hero-copy"><div class="hero-kicker"><span class="live-dot"></span> RESEARCH PROTOTYPE <span class="hero-divider">/</span> SOFTWARE-FIRST</div><h2>Compute only<br/>when it <em>matters.</em></h2><p>NEUROCORE investigates how adaptive, event-driven spiking neural networks can balance inference accuracy and computational activity across edge platforms.</p><div class="hero-actions"><button class="btn btn-bright" data-goto="simulator">Explore the simulator <span>→</span></button><button class="text-button" data-goto="architecture">View system architecture <span>↗</span></button></div></div>
-            <div class="hero-visual" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="orbit orbit-three"></div><div class="core-node"><span class="core-ring"></span><span class="core-center">N</span></div><span class="orbit-node node-a"></span><span class="orbit-node node-b"></span><span class="orbit-node node-c"></span><span class="orbit-node node-d"></span><span class="orbit-node node-e"></span><span class="orbit-node node-f"></span><div class="signal-line line-a"></div><div class="signal-line line-b"></div><div class="signal-line line-c"></div><div class="visual-label label-a">SPIKE EVENT <b>→</b></div><div class="visual-label label-b">ADAPTIVE THRESHOLD <b>↗</b></div><div class="visual-label label-c">EDGE INFERENCE <b>●</b></div></div>
-            <div class="hero-foot"><span><b>01</b> / EVENT-DRIVEN RUNTIME</span><span><b>02</b> / ADAPTIVE POLICIES</span><span><b>03</b> / MEASUREMENT-FIRST</span></div>
-          </div>
-
-          <div class="section-row"><div><div class="eyebrow">PLATFORM SNAPSHOT</div><h2>System at a glance</h2></div><span class="muted-note">Prototype capabilities · Nov 2026</span></div>
-          <div class="metric-grid">
-            <article class="metric-card"><div class="metric-top"><span>SIMULATION ENGINE</span><span class="metric-icon cyan">⌁</span></div><div class="metric-value">LIF <small>NEURON MODEL</small></div><div class="metric-bottom"><span class="status-dot ready"></span> Browser prototype</div></article>
-            <article class="metric-card"><div class="metric-top"><span>ADAPTIVE POLICIES</span><span class="metric-icon violet">⌘</span></div><div class="metric-value">03 <small>POLICY MODULES</small></div><div class="metric-bottom"><span class="status-dot progress"></span> Interactive concepts</div></article>
-            <article class="metric-card"><div class="metric-top"><span>EXECUTION BACKENDS</span><span class="metric-icon blue">▣</span></div><div class="metric-value">01 <small>DEMO BACKEND</small></div><div class="metric-bottom"><span class="status-dot ready"></span> Browser / CPU-hosted UI</div></article>
-            <article class="metric-card"><div class="metric-top"><span>PHYSICAL HARDWARE</span><span class="metric-icon amber">⌁</span></div><div class="metric-value">0 <small>CONNECTED DEVICES</small></div><div class="metric-bottom"><span class="status-dot pending"></span> Hardware integration pending</div></article>
-          </div>
-
-          <div class="overview-columns">
-            <article class="panel activity-panel"><div class="panel-heading"><div><div class="eyebrow">CORE WORKFLOW</div><h3>From input to insight</h3></div><span class="subtle-tag">5 STAGES</span></div><div class="workflow-list"><div class="workflow-item"><span class="workflow-number">01</span><span class="workflow-icon">⌗</span><div><strong>Workload input</strong><small>Sensor streams · event vision · synthetic signals</small></div><span class="workflow-arrow">→</span></div><div class="workflow-item"><span class="workflow-number">02</span><span class="workflow-icon">⌁</span><div><strong>Event conversion</strong><small>Rate · temporal · latency encoding</small></div><span class="workflow-arrow">→</span></div><div class="workflow-item"><span class="workflow-number">03</span><span class="workflow-icon">◎</span><div><strong>Spiking runtime</strong><small>LIF neurons · event queue · sparse updates</small></div><span class="workflow-arrow">→</span></div><div class="workflow-item"><span class="workflow-number">04</span><span class="workflow-icon">⌘</span><div><strong>Adaptive computation</strong><small>Threshold · temporal resolution · early exit</small></div><span class="workflow-arrow">→</span></div><div class="workflow-item"><span class="workflow-number">05</span><span class="workflow-icon">▥</span><div><strong>Measure &amp; optimize</strong><small>Accuracy · latency · memory · energy</small></div><span class="workflow-arrow">✓</span></div></div></article>
-            <article class="panel focus-panel"><div class="panel-heading"><div><div class="eyebrow">RESEARCH DIRECTION</div><h3>What we are investigating</h3></div><span class="accent-spark">✳</span></div><div class="focus-highlight"><span class="focus-label">PRIMARY RESEARCH GAP</span><h4>Hardware-measured trade-off characterization.</h4><p>Understand which adaptive policy offers the best accuracy–computation trade-off on each hardware backend.</p></div><div class="focus-stats"><div><strong>3</strong><span>research gaps</span></div><div><strong>4</strong><span>core experiments</span></div><div><strong>4</strong><span>target backends</span></div></div><button class="panel-link" data-goto="research">Explore research objectives <span>→</span></button></article>
-          </div>
-          <div class="disclaimer-strip"><span class="info-symbol">i</span><p><strong>Prototype disclosure:</strong> This website currently demonstrates software concepts and browser-side simulations. It does not represent physical hardware measurements or validated energy savings.</p><button data-goto="hardware">Hardware status <span>↗</span></button></div>
-        </section>
-
-        <!-- SIMULATOR -->
-        <section class="page" id="page-simulator">
-          <div class="page-heading compact-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> INTERACTIVE ENVIRONMENT / 01</div><h1>Simulation <span>lab.</span></h1><p class="page-subtitle">Configure a simplified Leaky Integrate-and-Fire network and observe spike activity.</p></div><span class="simulation-badge"><span class="pulse-dot"></span> BROWSER SIMULATION</span></div>
-          <div class="sim-layout">
-            <aside class="panel control-panel"><div class="panel-heading"><div><div class="eyebrow">EXPERIMENT CONFIG</div><h3>Simulation controls</h3></div><button class="reset-button" id="resetSim" title="Reset settings">↺</button></div>
-              <div class="control-group"><div class="control-title"><label for="neuronCount">Network size</label><output id="neuronCountOut">48 neurons</output></div><input type="range" id="neuronCount" min="12" max="96" value="48" step="12"><div class="range-labels"><span>12</span><span>96 neurons</span></div></div>
-              <div class="control-group"><div class="control-title"><label for="inputSparsity">Input sparsity</label><output id="sparsityOut">70%</output></div><input type="range" id="inputSparsity" min="0" max="95" value="70" step="5"><div class="range-labels"><span>Dense input</span><span>Sparse input</span></div></div>
-              <div class="control-group"><div class="control-title"><label for="firingThreshold">Firing threshold</label><output id="thresholdOut">0.65</output></div><input type="range" id="firingThreshold" min="25" max="100" value="65" step="5"><div class="range-labels"><span>0.25</span><span>1.00</span></div></div>
-              <div class="control-group"><div class="control-title"><label for="simulationSteps">Simulation steps</label><output id="stepsOut">30 steps</output></div><input type="range" id="simulationSteps" min="10" max="80" value="30" step="5"><div class="range-labels"><span>10</span><span>80 steps</span></div></div>
-              <div class="control-divider"></div>
-              <div class="control-group"><div class="control-title"><span class="control-label">Execution mode</span></div><div class="segmented" id="executionMode"><button class="selected" data-mode="event">Event-driven</button><button data-mode="clock">Time-stepped</button></div><p class="field-hint">Choose how neuron state updates are scheduled.</p></div>
-              <div class="control-divider"></div>
-              <div class="control-title policy-heading"><span class="control-label">Adaptive policies</span><span class="optional-label">OPTIONAL</span></div>
-              <label class="toggle-row"><span><b>Adaptive threshold</b><small>Modulate threshold with event activity</small></span><input type="checkbox" id="adaptiveThreshold"><i></i></label>
-              <label class="toggle-row"><span><b>Adaptive temporal bins</b><small>Adjust temporal resolution to activity</small></span><input type="checkbox" id="adaptiveTemporal"><i></i></label>
-              <div class="control-divider"></div>
-              <button class="btn btn-primary run-button" id="runSimulation"><span class="run-icon">▶</span> Run simulation <span class="button-shortcut">↵</span></button>
-              <button class="btn btn-ghost full-button" id="clearSimulation">Clear visualisation</button>
-            </aside>
-
-            <div class="sim-main"><article class="panel network-panel"><div class="panel-heading"><div><div class="eyebrow">LIVE NETWORK VIEW</div><h3>Neural activity map</h3></div><div class="network-legend"><span><i class="legend-dot active-dot"></i> Spiking</span><span><i class="legend-dot idle-dot"></i> Idle</span></div></div><div class="network-canvas-wrap"><canvas id="networkCanvas" aria-label="Neural network activity visualization"></canvas><div class="canvas-center-label" id="canvasPlaceholder"><div class="placeholder-orbit">◎</div><strong>Network ready</strong><span>Configure your experiment and run the simulation.</span></div><div class="canvas-corner tl">NEURAL LAYER / 01</div><div class="canvas-corner tr">LIVE RENDER</div><div class="canvas-corner bl">LIF · DISCRETE DEMO</div><div class="canvas-corner br" id="networkFrame">FRAME —</div></div><div class="network-footer"><span><i class="legend-dot input-dot"></i> Input events</span><span><i class="legend-dot signal-dot"></i> Synaptic propagation</span><span class="network-foot-right" id="networkStatus">Awaiting execution</span></div></article>
-              <div class="sim-kpis"><article class="panel mini-kpi"><span>SPIKES GENERATED</span><strong id="spikesMetric">—</strong><small>Output events</small></article><article class="panel mini-kpi"><span>NEURON UPDATES</span><strong id="updatesMetric">—</strong><small>State evaluations</small></article><article class="panel mini-kpi"><span>ACTIVE NEURONS</span><strong id="activeMetric">—</strong><small>Unique neurons fired</small></article><article class="panel mini-kpi"><span>EVENT DENSITY</span><strong id="densityMetric">—</strong><small>Observed activity</small></article></div>
-              <article class="panel log-panel"><div class="panel-heading"><div><div class="eyebrow">EXECUTION TRACE</div><h3>Event log</h3></div><span class="subtle-tag" id="logCount">0 EVENTS</span></div><div class="event-log" id="eventLog"><div class="empty-log"><span>⌁</span> Simulation events will appear here after execution.</div></div></article>
+            <div>
+              <div class="eyebrow"><span class="eyebrow-line"></span> ADAPTIVE EDGE INTELLIGENCE</div>
+              <h1>Research <span>workspace.</span></h1>
+              <p class="page-subtitle">Explore event-driven spiking neural networks, adaptive computation and hardware-aware benchmarking.</p>
+            </div>
+            <div class="heading-actions">
+              <span class="version-chip">BUILD 2.0.0</span>
+              <button class="btn btn-primary" data-goto="simulator"><span>Run a simulation</span><b>↗</b></button>
             </div>
           </div>
-          <div class="disclaimer-strip"><span class="info-symbol">i</span><p><strong>Model note:</strong> This is a simplified discrete LIF demonstration intended to explain the execution concept. It is not the final optimized NEUROCORE runtime and does not establish energy efficiency.</p></div>
+
+          <!-- HERO PANEL WITH 3D NEURAL NET BACKGROUND -->
+          <div class="hero-panel">
+            <div class="hero-glow"></div>
+            <div class="hero-grid"></div>
+            <!-- 3D Three.js Container -->
+            <div id="hero-three-container"></div>
+
+            <div class="hero-copy">
+              <div class="hero-kicker"><span class="live-dot"></span> RESEARCH PROTOTYPE <span class="hero-divider">/</span> SOFTWARE-FIRST</div>
+              <h2>Intelligence that computes<br/>only when it <em>matters.</em></h2>
+              <p>An adaptive event-driven neuromorphic computing platform for hardware-aware edge intelligence. NEUROCORE investigates how event-driven spiking neural networks balance inference accuracy and computational activity across edge platforms.</p>
+              <div class="hero-actions">
+                <button class="btn btn-bright" data-goto="simulator">Explore Simulation <span>→</span></button>
+                <button class="text-button" data-goto="architecture">View system architecture <span>↗</span></button>
+              </div>
+            </div>
+
+            <!-- CSS Fallback when WebGL is unavailable -->
+            <div class="hero-visual" aria-hidden="true">
+              <div class="orbit orbit-one"></div>
+              <div class="orbit orbit-two"></div>
+              <div class="orbit orbit-three"></div>
+              <div class="core-node"><span class="core-ring"></span><span class="core-center">N</span></div>
+              <span class="orbit-node node-a"></span>
+              <span class="orbit-node node-b"></span>
+              <span class="orbit-node node-c"></span>
+              <span class="orbit-node node-d"></span>
+              <span class="orbit-node node-e"></span>
+              <span class="orbit-node node-f"></span>
+              <div class="signal-line line-a"></div>
+              <div class="signal-line line-b"></div>
+              <div class="signal-line line-c"></div>
+              <div class="visual-label label-a">SPIKE EVENT <b>→</b></div>
+              <div class="visual-label label-b">ADAPTIVE THRESHOLD <b>↗</b></div>
+              <div class="visual-label label-c">EDGE INFERENCE <b>●</b></div>
+            </div>
+
+            <div class="hero-foot">
+              <span><b>01</b> / EVENT-DRIVEN RUNTIME</span>
+              <span><b>02</b> / ADAPTIVE POLICIES</span>
+              <span><b>03</b> / MEASUREMENT-FIRST</span>
+            </div>
+          </div>
+
+          <!-- SYSTEM AT A GLANCE METRICS -->
+          <div class="section-row">
+            <div><div class="eyebrow">PLATFORM SNAPSHOT</div><h2>System at a glance</h2></div>
+            <span class="muted-note">Architecture &amp; simulation stack</span>
+          </div>
+          <div class="metric-grid">
+            <article class="metric-card">
+              <div class="metric-top"><span>SIMULATION ENGINE</span><span class="metric-icon cyan">⌁</span></div>
+              <div class="metric-value">LIF <small>NEURON MODEL</small></div>
+              <div class="metric-bottom"><span class="status-dot ready"></span> Interactive 3D &amp; discrete engine</div>
+            </article>
+            <article class="metric-card">
+              <div class="metric-top"><span>ADAPTIVE POLICIES</span><span class="metric-icon violet">⌘</span></div>
+              <div class="metric-value">03 <small>POLICY MODULES</small></div>
+              <div class="metric-bottom"><span class="status-dot ready"></span> Threshold · Temporal · Early Exit</div>
+            </article>
+            <article class="metric-card">
+              <div class="metric-top"><span>EXECUTION MODES</span><span class="metric-icon blue">▣</span></div>
+              <div class="metric-value">02 <small>RUNTIMES</small></div>
+              <div class="metric-bottom"><span class="status-dot ready"></span> Event-Driven &amp; Time-Stepped</div>
+            </article>
+            <article class="metric-card">
+              <div class="metric-top"><span>PHYSICAL HARDWARE</span><span class="metric-icon amber">⌁</span></div>
+              <div class="metric-value">0 <small>CONNECTED DEVICES</small></div>
+              <div class="metric-bottom"><span class="status-dot pending"></span> Hardware instrumentation pending</div>
+            </article>
+          </div>
+
+          <!-- CORE CAPABILITIES GRID -->
+          <div class="section-row">
+            <div><div class="eyebrow">RESEARCH PILLARS</div><h2>Core platform capabilities</h2></div>
+            <span class="muted-note">Key architectural innovations</span>
+          </div>
+          <div class="caps-grid">
+            <article class="cap-card">
+              <span class="cap-icon">⚡</span>
+              <h4>Event-Driven Sparsity</h4>
+              <p>State evaluations occur only upon arrival of incoming synaptic spikes. Zero activity translates directly into zero compute cycles, eliminating redundant floating-point operations in low-salience temporal periods.</p>
+            </article>
+            <article class="cap-card">
+              <span class="cap-icon">🎯</span>
+              <h4>Dynamic Adaptive Policies</h4>
+              <p>Activity-dependent threshold modulation and temporal bin scaling ensure optimal sensitivity during quiet intervals while stabilizing firing rates during burst activity to conserve energy and compute bandwidth.</p>
+            </article>
+            <article class="cap-card">
+              <span class="cap-icon">📊</span>
+              <h4>Rigorous Proxy Profiling</h4>
+              <p>Strict architectural separation between computational proxies (synaptic events, neuron updates) and physical device measurements (wall-clock latency, Joules), avoiding ungrounded energy claims.</p>
+            </article>
+          </div>
+
+          <!-- WORKFLOW & RESEARCH FOCUS -->
+          <div class="overview-columns">
+            <article class="panel activity-panel">
+              <div class="panel-heading">
+                <div><div class="eyebrow">CORE WORKFLOW</div><h3>From input to insight</h3></div>
+                <span class="subtle-tag">5 STAGES</span>
+              </div>
+              <div class="workflow-list">
+                <div class="workflow-item"><span class="workflow-number">01</span><span class="workflow-icon">⌗</span><div><strong>Workload input</strong><small>Sensor streams · event vision (DVS) · synthetic signals</small></div><span class="workflow-arrow">→</span></div>
+                <div class="workflow-item"><span class="workflow-number">02</span><span class="workflow-icon">⌁</span><div><strong>Event conversion</strong><small>Rate · temporal · delta modulation · latency encoding</small></div><span class="workflow-arrow">→</span></div>
+                <div class="workflow-item"><span class="workflow-number">03</span><span class="workflow-icon">◎</span><div><strong>Spiking runtime</strong><small>LIF neurons · event queue · sparse synaptic updates</small></div><span class="workflow-arrow">→</span></div>
+                <div class="workflow-item"><span class="workflow-number">04</span><span class="workflow-icon">⌘</span><div><strong>Adaptive computation</strong><small>Threshold modulation · temporal resolution · early exit</small></div><span class="workflow-arrow">→</span></div>
+                <div class="workflow-item"><span class="workflow-number">05</span><span class="workflow-icon">▥</span><div><strong>Measure &amp; optimize</strong><small>Accuracy · latency · memory · true energy interface</small></div><span class="workflow-arrow">✓</span></div>
+              </div>
+            </article>
+
+            <article class="panel focus-panel">
+              <div class="panel-heading">
+                <div><div class="eyebrow">RESEARCH DIRECTION</div><h3>What we are investigating</h3></div>
+                <span class="accent-spark">✳</span>
+              </div>
+              <div class="focus-highlight">
+                <span class="focus-label">PRIMARY RESEARCH GAP</span>
+                <h4>Hardware-measured trade-off characterization.</h4>
+                <p>Quantifying which adaptive SNN policy offers the Pareto-optimal accuracy–computation trade-off across heterogeneous edge architectures.</p>
+              </div>
+              <div class="focus-stats">
+                <div><strong>3</strong><span>research gaps</span></div>
+                <div><strong>4</strong><span>core experiments</span></div>
+                <div><strong>4</strong><span>target backends</span></div>
+              </div>
+              <button class="panel-link" data-goto="research">Explore research objectives <span>→</span></button>
+            </article>
+          </div>
+
+          <!-- LANDING PREVIEWS: SIMULATION & ARCHITECTURE -->
+          <div class="landing-grid-2col">
+            <article class="panel">
+              <div class="panel-heading">
+                <div><div class="eyebrow">INTERACTIVE LAB</div><h3>SNN Simulation Environment</h3></div>
+                <span class="subtle-tag">LIVE ENGINE</span>
+              </div>
+              <div class="landing-card-body">
+                <p>Observe interconnected Leaky Integrate-and-Fire neurons, live membrane potential traces, spike raster marks, and the internal event queue in real time.</p>
+                <button class="btn btn-primary" data-goto="simulator">Launch Simulation Lab <span>→</span></button>
+              </div>
+            </article>
+            <article class="panel">
+              <div class="panel-heading">
+                <div><div class="eyebrow">SYSTEM BLUEPRINT</div><h3>Interactive Architecture Stack</h3></div>
+                <span class="subtle-tag">5 LAYERS</span>
+              </div>
+              <div class="landing-card-body">
+                <p>Inspect the complete 5-layer system architecture: Workload Interface, Core Runtime, Adaptive Engine, Measurement, and Experiment Orchestration.</p>
+                <button class="btn btn-secondary" data-goto="architecture">Explore Architecture <span>↗</span></button>
+              </div>
+            </article>
+          </div>
+
+          <div class="disclaimer-strip">
+            <span class="info-symbol">i</span>
+            <p><strong>Prototype disclosure:</strong> This platform demonstrates software concepts and browser-side simulations. It does not represent physical hardware measurements or validated energy savings.</p>
+            <button data-goto="hardware">Hardware status <span>↗</span></button>
+          </div>
         </section>
 
-        <!-- BENCHMARKS -->
+        <!-- ════════════════════════════════════════════════════════════════
+             PAGE 2: SIMULATION LAB (FIXED & HIGH PRIORITY)
+             ════════════════════════════════════════════════════════════════ -->
+        <section class="page" id="page-simulator">
+          <div class="page-heading compact-heading">
+            <div>
+              <div class="eyebrow"><span class="eyebrow-line"></span> INTERACTIVE ENVIRONMENT / 01</div>
+              <h1>Simulation <span>lab.</span></h1>
+              <p class="page-subtitle">Configure an interconnected Leaky Integrate-and-Fire network and observe real-time membrane potential, spike propagation and event queue scheduling.</p>
+            </div>
+            <span class="simulation-badge"><span class="pulse-dot"></span> SNN RUNTIME ACTIVE</span>
+          </div>
+
+          <div class="sim-layout">
+            <!-- EXPERIMENT CONTROLS PANEL -->
+            <aside class="panel control-panel">
+              <div class="panel-heading">
+                <div><div class="eyebrow">EXPERIMENT CONFIG</div><h3>Simulation controls</h3></div>
+                <button class="reset-button" id="resetSim" title="Reset all settings to default">↺</button>
+              </div>
+
+              <!-- Sliders -->
+              <div class="control-group">
+                <div class="control-title"><label for="neuronCount">Network size</label><output id="neuronCountOut">48 neurons</output></div>
+                <input type="range" id="neuronCount" min="12" max="96" value="48" step="12" />
+                <div class="range-labels"><span>12</span><span>96 neurons</span></div>
+              </div>
+
+              <div class="control-group">
+                <div class="control-title"><label for="inputSparsity">Input sparsity</label><output id="sparsityOut">70%</output></div>
+                <input type="range" id="inputSparsity" min="0" max="95" value="70" step="5" />
+                <div class="range-labels"><span>Dense (0%)</span><span>Sparse (95%)</span></div>
+              </div>
+
+              <div class="control-group">
+                <div class="control-title"><label for="firingThreshold">Firing threshold (Vth)</label><output id="thresholdOut">0.65</output></div>
+                <input type="range" id="firingThreshold" min="25" max="100" value="65" step="5" />
+                <div class="range-labels"><span>0.25</span><span>1.00</span></div>
+              </div>
+
+              <div class="control-group">
+                <div class="control-title"><label for="simulationSteps">Simulation steps</label><output id="stepsOut">40 steps</output></div>
+                <input type="range" id="simulationSteps" min="10" max="100" value="40" step="5" />
+                <div class="range-labels"><span>10</span><span>100 steps</span></div>
+              </div>
+
+              <div class="control-divider"></div>
+
+              <!-- Execution Mode -->
+              <div class="control-group">
+                <div class="control-title"><span class="control-label">Execution mode</span></div>
+                <div class="segmented" id="executionMode">
+                  <button class="selected" data-mode="event">Event-driven</button>
+                  <button data-mode="clock">Time-stepped</button>
+                </div>
+                <p class="field-hint">Event-driven processes active queues; time-stepped loops all neurons.</p>
+              </div>
+
+              <!-- Playback Speed -->
+              <div class="speed-control">
+                <label for="simSpeed">Playback Speed</label>
+                <select id="simSpeed">
+                  <option value="0.5">0.5x (Slow)</option>
+                  <option value="1" selected>1x (Normal)</option>
+                  <option value="2">2x (Fast)</option>
+                  <option value="5">5x (Maximum)</option>
+                </select>
+              </div>
+
+              <div class="control-divider"></div>
+
+              <!-- Adaptive Policies -->
+              <div class="control-title policy-heading">
+                <span class="control-label">Adaptive policies</span>
+                <span class="optional-label">RESEARCH</span>
+              </div>
+              <label class="toggle-row">
+                <span><b>Adaptive threshold</b><small>Modulate threshold with incoming event density</small></span>
+                <input type="checkbox" id="adaptiveThreshold" />
+                <i></i>
+              </label>
+              <label class="toggle-row">
+                <span><b>Adaptive temporal bins</b><small>Coarsen temporal bins during low activity</small></span>
+                <input type="checkbox" id="adaptiveTemporal" />
+                <i></i>
+              </label>
+
+              <div class="control-divider"></div>
+
+              <!-- Primary Run Button -->
+              <button class="btn btn-primary run-button" id="runSimulation">
+                <span class="run-icon">▶</span> Run simulation <span class="button-shortcut">↵</span>
+              </button>
+
+              <!-- Playback Control Toolbar (Pause / Resume / Step / Reset) -->
+              <div class="sim-playback">
+                <button class="btn btn-secondary" id="pauseSimulation" title="Pause simulation" disabled><span class="play-icon">⏸</span> Pause</button>
+                <button class="btn btn-secondary" id="resumeSimulation" title="Resume simulation" disabled><span class="play-icon">▶</span> Resume</button>
+                <button class="btn btn-secondary" id="stepSimulation" title="Step one simulation interval"><span class="play-icon">⏭</span> Step</button>
+                <button class="btn btn-ghost" id="resetSimBtn" title="Reset simulation state">↺ Reset</button>
+              </div>
+
+              <button class="btn btn-ghost full-button" id="clearSimulation">Clear visualization</button>
+            </aside>
+
+            <!-- SIMULATION MAIN AREA -->
+            <div class="sim-main">
+              <!-- 3D NEURAL NETWORK VISUALIZATION -->
+              <article class="panel network-panel">
+                <div class="panel-heading">
+                  <div><div class="eyebrow">LIVE 3D SNN NETWORK VIEW</div><h3>Neuron mesh &amp; spike propagation</h3></div>
+                  <div class="network-legend">
+                    <span><i class="legend-dot active-dot"></i> Spiking (#00D9FF)</span>
+                    <span><i class="legend-dot idle-dot"></i> Idle</span>
+                    <span><i class="legend-dot input-dot"></i> Input spike</span>
+                  </div>
+                </div>
+
+                <!-- 3D Three.js Container -->
+                <div id="sim-three-container">
+                  <button class="camera-reset-btn" id="resetSimCamera" title="Reset 3D camera orientation">Reset View ↺</button>
+                  <div class="canvas-center-label" id="canvasPlaceholder">
+                    <div class="placeholder-orbit">◎</div>
+                    <strong>3D SNN Network Ready</strong>
+                    <span>Click Run or Step to trigger spike events.</span>
+                  </div>
+                  <div class="canvas-corner tl">3D LIF MESH</div>
+                  <div class="canvas-corner tr">WEBGL RENDER</div>
+                  <div class="canvas-corner bl" id="simModeBadge">MODE: EVENT-DRIVEN</div>
+                  <div class="canvas-corner br" id="networkFrame">STEP 00</div>
+                </div>
+
+                <!-- Fallback 2D Canvas (hidden when 3D is active) -->
+                <canvas id="networkCanvas" style="display:none;"></canvas>
+
+                <div class="network-footer">
+                  <span><i class="legend-dot signal-dot"></i> Synaptic delay buffer</span>
+                  <span class="network-foot-right" id="networkStatus">Awaiting execution</span>
+                </div>
+              </article>
+
+              <!-- SIMULATION METRICS / KPIS -->
+              <div class="sim-kpis">
+                <article class="panel mini-kpi">
+                  <span>SPIKES GENERATED</span>
+                  <strong id="spikesMetric">—</strong>
+                  <small>Output spike events</small>
+                </article>
+                <article class="panel mini-kpi">
+                  <span>NEURON UPDATES</span>
+                  <strong id="updatesMetric">—</strong>
+                  <small>Evaluated state transitions</small>
+                </article>
+                <article class="panel mini-kpi">
+                  <span>ACTIVE NEURONS</span>
+                  <strong id="activeMetric">—</strong>
+                  <small>Neurons firing this run</small>
+                </article>
+                <article class="panel mini-kpi">
+                  <span>EVENT DENSITY</span>
+                  <strong id="densityMetric">—</strong>
+                  <small>Activity ratio</small>
+                </article>
+              </div>
+
+              <!-- SCIENTIFIC CHARTS GRID (MEMBRANE POTENTIAL, RASTER PLOT, ACTIVITY) -->
+              <div class="sim-charts-grid">
+                <!-- CHART 1: MEMBRANE POTENTIAL GRAPH -->
+                <article class="panel chart-card">
+                  <div class="panel-heading">
+                    <div>
+                      <div class="eyebrow">MEMBRANE DYNAMICS</div>
+                      <h3>Membrane potential trace (LIF)</h3>
+                    </div>
+                    <div class="chart-selector">
+                      <label for="membraneNeuronSelect">Inspect Neuron:</label>
+                      <select id="membraneNeuronSelect" class="compact-select"></select>
+                    </div>
+                  </div>
+                  <div class="chart-membrane">
+                    <canvas id="membraneChartCanvas"></canvas>
+                  </div>
+                  <div class="chart-footer">
+                    <span><i class="legend-line line-threshold"></i> Firing Threshold (Vth)</span>
+                    <span><i class="legend-line line-reset"></i> Reset Voltage (Vreset)</span>
+                    <span><i class="legend-line line-potential"></i> Membrane Potential V(t)</span>
+                  </div>
+                </article>
+
+                <!-- CHART 2: SPIKE RASTER PLOT -->
+                <article class="panel chart-card">
+                  <div class="panel-heading">
+                    <div>
+                      <div class="eyebrow">SPARSE TEMPORAL RASTER</div>
+                      <h3>Spike raster plot</h3>
+                    </div>
+                    <span class="subtle-tag" id="rasterSpikeCount">0 SPIKES</span>
+                  </div>
+                  <div class="chart-raster">
+                    <canvas id="rasterChartCanvas"></canvas>
+                  </div>
+                  <div class="chart-footer">
+                    <span>Y: Neuron Index</span>
+                    <span>X: Simulation Timestep</span>
+                    <span style="color:var(--cyan)">Cyan ticks: Spike firing event</span>
+                  </div>
+                </article>
+
+                <!-- CHART 3: SPIKE ACTIVITY & FREQUENCY GRAPH -->
+                <article class="panel chart-card">
+                  <div class="panel-heading">
+                    <div>
+                      <div class="eyebrow">POPULATION ACTIVITY</div>
+                      <h3>Spike count &amp; frequency</h3>
+                    </div>
+                    <span class="subtle-tag" id="activityRate">0 SPIKES/STEP</span>
+                  </div>
+                  <div class="chart-spike-activity">
+                    <canvas id="activityChartCanvas"></canvas>
+                  </div>
+                  <div class="chart-footer">
+                    <span><i class="legend-bar bar-spikes"></i> Spikes per step</span>
+                    <span><i class="legend-line line-freq"></i> Activity trend</span>
+                  </div>
+                </article>
+              </div>
+
+              <!-- SYNAPTIC EVENT QUEUE VISUALIZATION -->
+              <article class="panel event-queue-viz">
+                <div class="panel-heading">
+                  <div>
+                    <div class="eyebrow">EVENT SCHEDULER &amp; BUFFER</div>
+                    <h3>Active synaptic event queue</h3>
+                  </div>
+                  <span class="subtle-tag" id="queueLengthTag">0 EVENTS IN QUEUE</span>
+                </div>
+                <div class="eq-table-wrap">
+                  <table class="eq-table">
+                    <thead>
+                      <tr>
+                        <th>DUE STEP</th>
+                        <th>SRC NEURON</th>
+                        <th>TARGET NEURON</th>
+                        <th>WEIGHT</th>
+                        <th>STATUS</th>
+                      </tr>
+                    </thead>
+                    <tbody id="eventQueueBody">
+                      <tr><td colspan="5" class="empty-table">No pending synaptic events. Run or step simulation to observe queue activity.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </article>
+
+              <!-- EXECUTION TRACE LOG -->
+              <article class="panel log-panel">
+                <div class="panel-heading">
+                  <div><div class="eyebrow">EXECUTION TRACE</div><h3>Event log</h3></div>
+                  <span class="subtle-tag" id="logCount">0 EVENTS</span>
+                </div>
+                <div class="event-log" id="eventLog">
+                  <div class="empty-log"><span>⌁</span> Simulation events will appear here during execution.</div>
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <div class="disclaimer-strip">
+            <span class="info-symbol">i</span>
+            <p><strong>Simulation model note:</strong> Discrete Leaky Integrate-and-Fire network with synaptic delays and event-driven queue scheduling. Graphs update dynamically from simulation states.</p>
+          </div>
+        </section>
+
+        <!-- ════════════════════════════════════════════════════════════════
+             PAGE 3: BENCHMARK LAB (UPGRADED)
+             ════════════════════════════════════════════════════════════════ -->
         <section class="page" id="page-benchmarks">
-          <div class="page-heading compact-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> PERFORMANCE EXPLORATION / 02</div><h1>Benchmark <span>lab.</span></h1><p class="page-subtitle">Explore how workload sparsity changes computational activity across execution strategies.</p></div><span class="simulation-badge"><span class="pulse-dot"></span> MODELLED COUNTERS</span></div>
-          <article class="panel benchmark-config"><div><div class="eyebrow">WORKLOAD CONFIGURATION</div><h3>Adjust input sparsity</h3><p>See the modeled number of state updates for a fixed network workload.</p></div><div class="benchmark-slider"><div class="control-title"><label for="benchSparsity">Input sparsity</label><output id="benchSparsityOut">70%</output></div><input type="range" id="benchSparsity" min="0" max="95" value="70" step="5"><div class="range-labels"><span>0% · Dense</span><span>95% · Sparse</span></div></div><button class="btn btn-secondary" id="refreshBench">Recalculate <span>↻</span></button></article>
-          <div class="benchmark-summary"><div class="benchmark-summary-main"><span>MODELLED WORKLOAD</span><strong id="benchWorkload">10,000</strong><small>neuron-step opportunities</small></div><div><span>EVENT-DRIVEN UPDATES</span><strong id="benchEventUpdates">3,000</strong></div><div><span>TIME-STEPPED UPDATES</span><strong id="benchClockUpdates">10,000</strong></div><div><span>SKIPPED OPPORTUNITIES</span><strong id="benchSkipped">70%</strong></div></div>
-          <div class="benchmark-grid"><article class="panel chart-panel"><div class="panel-heading"><div><div class="eyebrow">COMPUTATIONAL ACTIVITY</div><h3>Update opportunities</h3></div><span class="subtle-tag">NORMALISED COUNTS</span></div><div class="bar-chart" id="benchmarkChart"><div class="chart-gridline g1"><span>10k</span></div><div class="chart-gridline g2"><span>7.5k</span></div><div class="chart-gridline g3"><span>5k</span></div><div class="chart-gridline g4"><span>2.5k</span></div><div class="chart-gridline g5"><span>0</span></div><div class="bar-group"><div class="bar bar-ann" id="barAnn" style="height:100%"><span>10k</span></div><label>Dense baseline</label></div><div class="bar-group"><div class="bar bar-clock" id="barClock" style="height:100%"><span>10k</span></div><label>Time-stepped SNN</label></div><div class="bar-group"><div class="bar bar-event" id="barEvent" style="height:30%"><span>3k</span></div><label>Event-driven model</label></div></div><div class="chart-note"><span class="note-line"></span> Lower update count indicates fewer modelled neuron-state evaluations, not necessarily lower wall-clock time or energy.</div></article>
-            <article class="panel comparison-panel"><div class="panel-heading"><div><div class="eyebrow">EXECUTION COMPARISON</div><h3>At this sparsity level</h3></div></div><div class="comparison-row"><div class="comparison-icon ann-icon">A</div><div class="comparison-detail"><strong>Dense ANN baseline</strong><small>Fixed full workload</small></div><strong class="comparison-value">10,000</strong></div><div class="comparison-row"><div class="comparison-icon clock-icon">T</div><div class="comparison-detail"><strong>Time-stepped SNN</strong><small>Updates every time step</small></div><strong class="comparison-value">10,000</strong></div><div class="comparison-row highlighted-row"><div class="comparison-icon event-icon">E</div><div class="comparison-detail"><strong>Event-driven model</strong><small>Updates on active inputs*</small></div><strong class="comparison-value" id="compareEvent">3,000</strong></div><div class="comparison-callout"><span>↗</span><p><strong id="modeledReduction">70% fewer updates</strong><br/>in this simplified activity model.</p></div></article></div>
-          <article class="panel metric-integrity"><div class="integrity-icon">i</div><div><strong>Measurement integrity comes first.</strong><p>Event-driven scheduling has queue and memory-access overhead. Fewer modeled updates do not prove lower latency or energy on a CPU. Those outcomes must be measured experimentally on the same hardware.</p></div><button class="panel-link" data-goto="research">See experiment methodology →</button></article>
-          <p class="footnote">*Illustrative counters are calculated by the browser from the selected sparsity value. No model training, device benchmarking, energy sensing or external measurement is performed on this page.</p>
+          <div class="page-heading compact-heading">
+            <div>
+              <div class="eyebrow"><span class="eyebrow-line"></span> PERFORMANCE EXPLORATION / 02</div>
+              <h1>Benchmark <span>lab.</span></h1>
+              <p class="page-subtitle">Compare computational activity across Dense ANN, Time-stepped SNN, and Event-driven SNN execution strategies.</p>
+            </div>
+            <span class="simulation-badge"><span class="pulse-dot"></span> MODELLED COUNTERS</span>
+          </div>
+
+          <!-- WORKLOAD CONFIGURATION -->
+          <article class="panel benchmark-config">
+            <div>
+              <div class="eyebrow">WORKLOAD CONFIGURATION</div>
+              <h3>Adjust input sparsity</h3>
+              <p>Compare modeled neuron-state evaluations and compute proxies across execution strategies.</p>
+            </div>
+            <div class="benchmark-slider">
+              <div class="control-title">
+                <label for="benchSparsity">Input sparsity</label>
+                <output id="benchSparsityOut">70%</output>
+              </div>
+              <input type="range" id="benchSparsity" min="0" max="95" value="70" step="5" />
+              <div class="range-labels"><span>0% · Dense</span><span>95% · Sparse</span></div>
+            </div>
+            <div class="benchmark-actions">
+              <button class="btn btn-secondary" id="refreshBench">Recalculate <span>↻</span></button>
+              <button class="csv-download-btn" id="downloadBenchCSV"><span>⬇</span> Download CSV</button>
+            </div>
+          </article>
+
+          <!-- SUMMARY KPIS -->
+          <div class="benchmark-summary">
+            <div class="benchmark-summary-main">
+              <span>MODELLED WORKLOAD</span>
+              <strong id="benchWorkload">10,000</strong>
+              <small>neuron-step opportunities</small>
+            </div>
+            <div>
+              <span>EVENT-DRIVEN UPDATES</span>
+              <strong id="benchEventUpdates">3,000</strong>
+              <small>active updates</small>
+            </div>
+            <div>
+              <span>TIME-STEPPED UPDATES</span>
+              <strong id="benchClockUpdates">10,000</strong>
+              <small>fixed evaluations</small>
+            </div>
+            <div>
+              <span>SKIPPED OPPORTUNITIES</span>
+              <strong id="benchSkipped">70%</strong>
+              <small>compute reduction</small>
+            </div>
+          </div>
+
+          <!-- BENCHMARK CHARTS (GROUPED BAR, SPARSITY CURVE, LATENCY PROXY) -->
+          <div class="benchmark-charts-grid">
+            <!-- CHART 1: GROUPED BAR CHART -->
+            <article class="panel">
+              <div class="panel-heading">
+                <div><div class="eyebrow">EXECUTION MODE COMPARISON</div><h3>Computational activity by metric</h3></div>
+                <span class="subtle-tag">SIMULATED PROXY</span>
+              </div>
+              <div class="benchmark-chart-container">
+                <canvas id="benchGroupedCanvas"></canvas>
+              </div>
+            </article>
+
+            <!-- CHART 2: SPARSITY CURVE -->
+            <article class="panel">
+              <div class="panel-heading">
+                <div><div class="eyebrow">SPARSITY SENSITIVITY</div><h3>Neuron updates vs. Input sparsity</h3></div>
+                <span class="subtle-tag">ILLUSTRATIVE</span>
+              </div>
+              <div class="benchmark-chart-container">
+                <canvas id="benchSparsityCanvas"></canvas>
+              </div>
+            </article>
+
+            <!-- CHART 3: LATENCY COMPARISON -->
+            <article class="panel" style="grid-column: 1 / -1;">
+              <div class="panel-heading">
+                <div><div class="eyebrow">EXECUTION LATENCY PROXY</div><h3>Estimated relative latency (normalized cycles)</h3></div>
+                <span class="subtle-tag">SIMULATED PROXY</span>
+              </div>
+              <div class="benchmark-chart-container" style="height: 180px;">
+                <canvas id="benchLatencyCanvas"></canvas>
+              </div>
+            </article>
+          </div>
+
+          <!-- COMPARISON SUMMARY & METRIC INTEGRITY -->
+          <div class="benchmark-grid" style="margin-top:14px;">
+            <article class="panel comparison-panel">
+              <div class="panel-heading">
+                <div><div class="eyebrow">EXECUTION COMPARISON</div><h3>At this sparsity level</h3></div>
+              </div>
+              <div class="comparison-row">
+                <div class="comparison-icon ann-icon">A</div>
+                <div class="comparison-detail"><strong>Dense ANN baseline</strong><small>Fixed full workload every cycle</small></div>
+                <strong class="comparison-value">10,000</strong>
+              </div>
+              <div class="comparison-row">
+                <div class="comparison-icon clock-icon">T</div>
+                <div class="comparison-detail"><strong>Time-stepped SNN</strong><small>Updates every neuron every dt</small></div>
+                <strong class="comparison-value">10,000</strong>
+              </div>
+              <div class="comparison-row highlighted-row">
+                <div class="comparison-icon event-icon">E</div>
+                <div class="comparison-detail"><strong>Event-driven model</strong><small>Evaluates only on incoming events</small></div>
+                <strong class="comparison-value" id="compareEvent">3,000</strong>
+              </div>
+              <div class="comparison-callout">
+                <span>↗</span>
+                <p><strong id="modeledReduction">70% fewer updates</strong><br/>in this modeled activity proxy.</p>
+              </div>
+            </article>
+
+            <article class="panel metric-integrity">
+              <div class="integrity-icon">i</div>
+              <div>
+                <strong>Measurement integrity comes first.</strong>
+                <p>Event-driven scheduling incurs queue insertion and buffer management overhead. Fewer modeled state updates do not automatically guarantee lower wall-clock latency or Joules on commodity hardware. True physical energy and latency must be measured with physical instruments on the exact target backend.</p>
+              </div>
+              <button class="panel-link" data-goto="research">See experiment methodology →</button>
+            </article>
+          </div>
+
+          <p class="footnote">*Illustrative counters and proxy graphs are calculated algorithmically by the browser. No physical device instrumentation, external power sensing, or fabricated experimental results are reported.</p>
         </section>
 
-        <!-- ARCHITECTURE -->
+        <!-- ════════════════════════════════════════════════════════════════
+             PAGE 4: ARCHITECTURE (INTERACTIVE DIAGRAM)
+             ════════════════════════════════════════════════════════════════ -->
         <section class="page" id="page-architecture">
-          <div class="page-heading compact-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> SYSTEM DESIGN / 03</div><h1>System <span>architecture.</span></h1><p class="page-subtitle">An evidence-based software architecture designed for modular experimentation and future hardware deployment.</p></div><span class="version-chip">NEUROCORE V2 · PROPOSED</span></div>
-          <div class="architecture-intro panel"><div><span class="architecture-mark">N</span></div><div><div class="eyebrow">MODULAR RESEARCH STACK</div><h3>Five layers. One measurement-first workflow.</h3><p>Separate workload preparation, runtime execution, adaptive policies, measurement and experiment orchestration so each component can be tested independently.</p></div></div>
-          <div class="architecture-stack">
-            <div class="arch-layer layer-five"><div class="arch-index">05</div><div class="arch-info"><span>EXPERIMENT ORCHESTRATION</span><strong>Reproducible experiment runner</strong><small>YAML configuration · random seeds · warm-up control · confidence intervals · hardware manifest</small></div><div class="arch-tags"><span>YAML</span><span>STATISTICS</span><span>DOCKER</span></div></div>
-            <div class="arch-connector"><span>↑</span><small>experiment configuration &amp; results</small></div>
-            <div class="arch-layer layer-four"><div class="arch-index">04</div><div class="arch-info"><span>MEASUREMENT &amp; OPTIMIZATION</span><strong>Performance and activity profiling</strong><small>Spike count · synaptic events · neuron updates · latency · memory · true energy interface</small></div><div class="arch-tags"><span>METRICS</span><span>PARETO</span><span>PROFILING</span></div></div>
-            <div class="arch-connector"><span>↑</span><small>computation metrics</small></div>
-            <div class="arch-layer layer-three"><div class="arch-index">03</div><div class="arch-info"><span>ADAPTIVE COMPUTATION ENGINE</span><strong>Pluggable adaptive policies</strong><small>Activity-modulated threshold · adaptive temporal bins · confidence-based early exit</small></div><div class="arch-tags"><span>THRESHOLD</span><span>TEMPORAL</span><span>EARLY EXIT</span></div></div>
-            <div class="arch-connector"><span>↑</span><small>event scheduling &amp; neuron dynamics</small></div>
-            <div class="arch-layer layer-two"><div class="arch-index">02</div><div class="arch-info"><span>CORE NEUROMORPHIC RUNTIME</span><strong>Event-driven CPU / time-stepped GPU strategy</strong><small>Timestamped event queue · scheduler · LIF / adaptive LIF · sparse synaptic updates</small></div><div class="arch-tags"><span>RUST / C++</span><span>PYTHON API</span><span>LIF</span></div></div>
-            <div class="arch-connector"><span>↑</span><small>encoded spike events</small></div>
-            <div class="arch-layer layer-one"><div class="arch-index">01</div><div class="arch-info"><span>WORKLOAD INTERFACE</span><strong>Input data and event conversion</strong><small>Event vision · IoT sensor streams · synthetic signals · rate / temporal / latency encoders</small></div><div class="arch-tags"><span>DVS</span><span>SENSORS</span><span>ENCODING</span></div></div>
+          <div class="page-heading compact-heading">
+            <div>
+              <div class="eyebrow"><span class="eyebrow-line"></span> SYSTEM DESIGN / 03</div>
+              <h1>System <span>architecture.</span></h1>
+              <p class="page-subtitle">An evidence-based software architecture designed for modular experimentation and future hardware deployment.</p>
+            </div>
+            <span class="version-chip">NEUROCORE V2 · PROPOSED</span>
           </div>
-          <div class="backend-row"><div class="backend-title"><div class="eyebrow">TARGET EXECUTION BACKENDS</div><h3>Hardware abstraction layer</h3></div><div class="backend-cards"><div><span class="backend-symbol">CPU</span><strong>Commodity CPU</strong><small>Event-driven · initial target</small><em class="state state-demo">DEMO TARGET</em></div><div><span class="backend-symbol">GPU</span><strong>GPU</strong><small>Time-stepped / temporal fusion</small><em class="state state-planned">PLANNED</em></div><div><span class="backend-symbol">Pi</span><strong>Raspberry Pi</strong><small>ARM · NEON optimization</small><em class="state state-planned">PLANNED</em></div><div><span class="backend-symbol">MCU</span><strong>ESP32-S3</strong><small>FreeRTOS · fixed-point</small><em class="state state-planned">PLANNED</em></div></div></div>
-          <div class="disclaimer-strip"><span class="info-symbol">i</span><p><strong>Architecture status:</strong> This is the proposed NEUROCORE v2 design from the research investigation. The diagram is an architectural target, not a claim that all five layers or backends are implemented.</p></div>
+
+          <div class="architecture-intro panel">
+            <div><span class="architecture-mark">N</span></div>
+            <div>
+              <div class="eyebrow">MODULAR RESEARCH STACK</div>
+              <h3>Five layers. One measurement-first workflow.</h3>
+              <p>Click any layer below to inspect its core responsibilities, component modules, inputs, outputs, and implementation status. Hardware backends are decoupled via the hardware abstraction layer.</p>
+            </div>
+          </div>
+
+          <!-- INTERACTIVE ARCHITECTURE DIAGRAM CONTAINER (MOUNTED BY JS) -->
+          <div id="interactiveArchContainer"></div>
+
+          <div class="disclaimer-strip" style="margin-top: 20px;">
+            <span class="info-symbol">i</span>
+            <p><strong>Architecture status:</strong> Proposed NEUROCORE v2 design from the research specification. The diagram represents the target architecture; backends are tracked according to their implementation status.</p>
+          </div>
         </section>
 
-        <!-- HARDWARE -->
+        <!-- ════════════════════════════════════════════════════════════════
+             PAGE 5: HARDWARE EXPLORER
+             ════════════════════════════════════════════════════════════════ -->
         <section class="page" id="page-hardware">
-          <div class="page-heading compact-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> DEPLOYMENT READINESS / 04</div><h1>Hardware <span>explorer.</span></h1><p class="page-subtitle">Track intended deployment targets without confusing planned integrations with validated measurements.</p></div><span class="pending-badge"><span></span> NO DEVICES CONNECTED</span></div>
-          <div class="hardware-notice"><div class="notice-symbol">⌁</div><div><strong>Software-first development is active.</strong><p>The current prototype runs in a browser. Physical target boards have not yet been integrated, so all device-specific results remain unreported.</p></div></div>
-          <div class="hardware-grid">
-            <article class="panel hardware-card"><div class="hardware-card-top"><span class="hardware-graphic cpu-graphic">CPU</span><span class="state state-demo">INITIAL TARGET</span></div><div class="eyebrow">X86 / ARM</div><h3>Commodity CPU</h3><p>Primary development and baseline comparison target for event-driven and time-stepped software execution.</p><div class="hardware-specs"><div><span>Execution</span><b>Software simulation</b></div><div><span>Runtime</span><b>Python → Rust / C++</b></div><div><span>Device status</span><b class="text-cyan">Not instrumented</b></div></div><div class="hardware-progress"><span style="width:20%"></span></div><small class="progress-caption">Integration planning</small></article>
-            <article class="panel hardware-card"><div class="hardware-card-top"><span class="hardware-graphic gpu-graphic">GPU</span><span class="state state-planned">PLANNED</span></div><div class="eyebrow">PARALLEL PROCESSING</div><h3>GPU backend</h3><p>Explore batched dense execution and temporal fusion instead of pure fine-grained event loops.</p><div class="hardware-specs"><div><span>Execution</span><b>Time-stepped / fused</b></div><div><span>Optimization</span><b>Batching</b></div><div><span>Device status</span><b>Not connected</b></div></div><div class="hardware-progress"><span style="width:4%"></span></div><small class="progress-caption">Not started</small></article>
-            <article class="panel hardware-card"><div class="hardware-card-top"><span class="hardware-graphic pi-graphic">Pi</span><span class="state state-planned">PLANNED</span></div><div class="eyebrow">ARM EDGE PLATFORM</div><h3>Raspberry Pi 5</h3><p>Potential ARM deployment using the CPU event-driven core and NEON-aware optimization.</p><div class="hardware-specs"><div><span>Target runtime</span><b>Event-driven</b></div><div><span>Optimization</span><b>NEON</b></div><div><span>Device status</span><b>Not connected</b></div></div><div class="hardware-progress"><span style="width:4%"></span></div><small class="progress-caption">Not started</small></article>
-            <article class="panel hardware-card"><div class="hardware-card-top"><span class="hardware-graphic mcu-graphic">MCU</span><span class="state state-stretch">STRETCH GOAL</span></div><div class="eyebrow">MICROCONTROLLER</div><h3>ESP32-S3</h3><p>Small-network embedded inference using static memory, fixed-point neuron state and FreeRTOS queues.</p><div class="hardware-specs"><div><span>Target runtime</span><b>Event-driven</b></div><div><span>Optimization</span><b>INT8 / INT16</b></div><div><span>Device status</span><b>Not connected</b></div></div><div class="hardware-progress"><span style="width:0%"></span></div><small class="progress-caption">Stretch scope</small></article>
+          <div class="page-heading compact-heading">
+            <div>
+              <div class="eyebrow"><span class="eyebrow-line"></span> DEPLOYMENT READINESS / 04</div>
+              <h1>Hardware <span>explorer.</span></h1>
+              <p class="page-subtitle">Track intended deployment targets without confusing planned integrations with validated measurements.</p>
+            </div>
+            <span class="pending-badge"><span></span> NO DEVICES CONNECTED</span>
           </div>
-          <article class="panel measurement-panel"><div class="panel-heading"><div><div class="eyebrow">VALIDATION CHECKLIST</div><h3>What must be measured on real hardware?</h3></div><span class="subtle-tag">FUTURE EXPERIMENTS</span></div><div class="measurement-list"><div><span class="check-empty"></span><strong>Wall-clock latency</strong><small>Repeated runs · warm-up exclusion · latency distribution</small></div><div><span class="check-empty"></span><strong>Peak memory</strong><small>Resident memory · allocation tracking</small></div><div><span class="check-empty"></span><strong>Computational activity</strong><small>Spike count · synaptic events · neuron updates · queue operations</small></div><div><span class="check-empty"></span><strong>True energy</strong><small>External power meter / instrumentation where available</small></div></div><div class="measurement-warning">Energy proxies and true energy readings must remain separate. Fewer spikes do not automatically mean lower energy on commodity hardware.</div></article>
+
+          <div class="hardware-notice">
+            <div class="notice-symbol">⌁</div>
+            <div>
+              <strong>Software-first development is active.</strong>
+              <p>The current prototype runs in the browser. Physical target boards have not yet been integrated, so all device-specific performance values remain unmeasured.</p>
+            </div>
+          </div>
+
+          <div class="hardware-grid">
+            <article class="panel hardware-card">
+              <div class="hardware-card-top">
+                <span class="hardware-graphic cpu-graphic">CPU</span>
+                <span class="state state-demo">INITIAL TARGET</span>
+              </div>
+              <div class="eyebrow">X86 / ARM</div>
+              <h3>Commodity CPU</h3>
+              <p>Primary development and baseline comparison target for event-driven and time-stepped software execution.</p>
+              <div class="hardware-specs">
+                <div><span>Execution</span><b>Event-driven / Time-stepped</b></div>
+                <div><span>Runtime</span><b>Python → Rust / C++</b></div>
+                <div><span>Device status</span><b class="text-cyan">Not instrumented</b></div>
+              </div>
+              <div class="hardware-progress"><span style="width:25%"></span></div>
+              <small class="progress-caption">Integration planning</small>
+            </article>
+
+            <article class="panel hardware-card">
+              <div class="hardware-card-top">
+                <span class="hardware-graphic gpu-graphic">GPU</span>
+                <span class="state state-planned">PLANNED</span>
+              </div>
+              <div class="eyebrow">PARALLEL ACCELERATION</div>
+              <h3>GPU backend</h3>
+              <p>Explore batched dense execution and temporal fusion kernels instead of pure fine-grained event loops.</p>
+              <div class="hardware-specs">
+                <div><span>Execution</span><b>Time-stepped / fused</b></div>
+                <div><span>Optimization</span><b>Batching / CUDA</b></div>
+                <div><span>Device status</span><b>Not connected</b></div>
+              </div>
+              <div class="hardware-progress"><span style="width:5%"></span></div>
+              <small class="progress-caption">Not started</small>
+            </article>
+
+            <article class="panel hardware-card">
+              <div class="hardware-card-top">
+                <span class="hardware-graphic pi-graphic">Pi</span>
+                <span class="state state-planned">PLANNED</span>
+              </div>
+              <div class="eyebrow">ARM EDGE PLATFORM</div>
+              <h3>Raspberry Pi 5</h3>
+              <p>Potential ARM deployment using the CPU event-driven core with NEON SIMD vector optimization.</p>
+              <div class="hardware-specs">
+                <div><span>Target runtime</span><b>Event-driven</b></div>
+                <div><span>Optimization</span><b>NEON SIMD</b></div>
+                <div><span>Device status</span><b>Not connected</b></div>
+              </div>
+              <div class="hardware-progress"><span style="width:5%"></span></div>
+              <small class="progress-caption">Not started</small>
+            </article>
+
+            <article class="panel hardware-card">
+              <div class="hardware-card-top">
+                <span class="hardware-graphic mcu-graphic">MCU</span>
+                <span class="state state-stretch">STRETCH GOAL</span>
+              </div>
+              <div class="eyebrow">MICROCONTROLLER</div>
+              <h3>ESP32-S3</h3>
+              <p>Small-network embedded inference using static memory, fixed-point neuron states and FreeRTOS queues.</p>
+              <div class="hardware-specs">
+                <div><span>Target runtime</span><b>Event-driven</b></div>
+                <div><span>Optimization</span><b>INT8 / Fixed-point</b></div>
+                <div><span>Device status</span><b>Not connected</b></div>
+              </div>
+              <div class="hardware-progress"><span style="width:0%"></span></div>
+              <small class="progress-caption">Stretch scope</small>
+            </article>
+          </div>
+
+          <article class="panel measurement-panel">
+            <div class="panel-heading">
+              <div><div class="eyebrow">VALIDATION CHECKLIST</div><h3>What must be measured on real hardware?</h3></div>
+              <span class="subtle-tag">FUTURE EXPERIMENTS</span>
+            </div>
+            <div class="measurement-list">
+              <div><span class="check-empty"></span><strong>Wall-clock latency</strong><small>Repeated runs · warm-up exclusion · latency distribution</small></div>
+              <div><span class="check-empty"></span><strong>Peak memory</strong><small>Resident memory · allocation tracking</small></div>
+              <div><span class="check-empty"></span><strong>Computational activity</strong><small>Spike count · synaptic events · neuron updates · queue operations</small></div>
+              <div><span class="check-empty"></span><strong>True energy</strong><small>External power meter / instrumentation where available</small></div>
+            </div>
+            <div class="measurement-warning">Energy proxies and true energy readings must remain strictly separate. Fewer spikes do not automatically imply lower power on commodity processors.</div>
+          </article>
         </section>
 
-        <!-- RESEARCH -->
+        <!-- ════════════════════════════════════════════════════════════════
+             PAGE 6: RESEARCH OVERVIEW
+             ════════════════════════════════════════════════════════════════ -->
         <section class="page" id="page-research">
-          <div class="page-heading compact-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> RESEARCH PROGRAMME / 05</div><h1>Research <span>overview.</span></h1><p class="page-subtitle">The questions, evidence and experiments guiding the NEUROCORE investigation.</p></div><span class="version-chip">RESEARCH BASIS · AUG 2026</span></div>
-          <div class="research-lead panel"><div class="research-lead-number">01</div><div><div class="eyebrow">REFINED RESEARCH GAP</div><h2>How do adaptive SNN policies trade accuracy for computation across real hardware?</h2><p>The central contribution is a rigorous, reproducible characterization of the accuracy–computation–energy trade-off surface, with computational proxies explicitly separated from true energy measurements.</p></div></div>
-          <div class="section-row"><div><div class="eyebrow">CORE RESEARCH QUESTIONS</div><h2>What we want to find out</h2></div></div>
-          <div class="question-grid"><article class="panel question-card"><span>RQ / 01</span><h3>Execution strategy</h3><p>How does event-driven execution compare with dense ANN and time-stepped SNN baselines at matched accuracy and varying input sparsity?</p></article><article class="panel question-card"><span>RQ / 02</span><h3>Adaptive threshold</h3><p>Can activity-dependent threshold adaptation reduce spike counts while maintaining acceptable accuracy?</p></article><article class="panel question-card"><span>RQ / 03</span><h3>Temporal resolution</h3><p>Can adaptive temporal binning reduce computation under low activity without losing important signal information?</p></article><article class="panel question-card"><span>RQ / 04</span><h3>Early exit</h3><p>What accuracy–computation trade-off is achieved when inference stops once confidence is sufficient?</p></article></div>
-          <div class="section-row"><div><div class="eyebrow">EXPERIMENT PLAN</div><h2>Core validation matrix</h2></div><span class="muted-note">Proposed · not yet measured</span></div>
-          <div class="panel experiment-table-wrap"><table class="experiment-table"><thead><tr><th>EXP.</th><th>HYPOTHESIS</th><th>VARIABLE</th><th>OBSERVE</th><th>STATUS</th></tr></thead><tbody><tr><td><b>E1</b></td><td>Event-driven execution reduces updates at high sparsity.</td><td>Execution mode / sparsity</td><td>Updates · latency · energy</td><td><span class="table-state demo-state">Demo concept</span></td></tr><tr><td><b>E2</b></td><td>Adaptive threshold reduces spikes with limited accuracy loss.</td><td>Threshold policy</td><td>Spikes · accuracy</td><td><span class="table-state planned-state">Planned</span></td></tr><tr><td><b>E3</b></td><td>Adaptive temporal resolution reduces updates at low activity.</td><td>Resolution policy</td><td>Updates · latency · accuracy</td><td><span class="table-state planned-state">Planned</span></td></tr><tr><td><b>E4</b></td><td>Early exit offers a favourable accuracy–compute trade-off.</td><td>Confidence / depth</td><td>Accuracy · layers · latency</td><td><span class="table-state planned-state">Planned</span></td></tr></tbody></table></div>
-          <div class="research-bottom"><article class="panel"><div class="eyebrow">METHODOLOGY</div><h3>Reproducibility by design</h3><ul class="method-list"><li>Multiple random seeds and repeated runs.</li><li>Warm-up runs excluded from timing.</li><li>Hardware and software configuration recorded.</li><li>Baseline comparisons on the same device.</li><li>Confidence intervals and statistical tests.</li><li>Proxy metrics reported separately from true energy.</li></ul></article><article class="panel"><div class="eyebrow">RESEARCH POSITION</div><h3>What NEUROCORE does not claim</h3><p class="position-copy">Event-driven SNN runtimes, adaptive thresholds, dynamic timesteps and early exit already exist in prior work. NEUROCORE does not claim these individual mechanisms as new.</p><p class="position-copy">The intended contribution is their integrated, pluggable evaluation and reproducible cross-hardware trade-off characterization.</p><span class="position-foot">EVIDENCE-DRIVEN · ADVERSARIAL · MEASUREMENT-FIRST</span></article></div>
+          <div class="page-heading compact-heading">
+            <div>
+              <div class="eyebrow"><span class="eyebrow-line"></span> RESEARCH PROGRAMME / 05</div>
+              <h1>Research <span>overview.</span></h1>
+              <p class="page-subtitle">The questions, evidence and experiments guiding the NEUROCORE investigation.</p>
+            </div>
+            <span class="version-chip">RESEARCH BASIS · 2026</span>
+          </div>
+
+          <div class="research-lead panel">
+            <div class="research-lead-number">01</div>
+            <div>
+              <div class="eyebrow">REFINED RESEARCH GAP</div>
+              <h2>How do adaptive SNN policies trade accuracy for computation across real hardware?</h2>
+              <p>The central contribution is a rigorous, reproducible characterization of the accuracy–computation–energy trade-off surface, with computational proxies explicitly separated from physical energy measurements.</p>
+            </div>
+          </div>
+
+          <div class="section-row">
+            <div><div class="eyebrow">CORE RESEARCH QUESTIONS</div><h2>What we want to find out</h2></div>
+          </div>
+          <div class="question-grid">
+            <article class="panel question-card">
+              <span>RQ / 01</span>
+              <h3>Execution strategy</h3>
+              <p>How does event-driven execution compare with dense ANN and time-stepped SNN baselines at matched accuracy and varying input sparsity?</p>
+            </article>
+            <article class="panel question-card">
+              <span>RQ / 02</span>
+              <h3>Adaptive threshold</h3>
+              <p>Can activity-dependent threshold adaptation reduce spike counts while maintaining acceptable inference accuracy?</p>
+            </article>
+            <article class="panel question-card">
+              <span>RQ / 03</span>
+              <h3>Temporal resolution</h3>
+              <p>Can adaptive temporal binning reduce computation under low activity without losing critical signal information?</p>
+            </article>
+            <article class="panel question-card">
+              <span>RQ / 04</span>
+              <h3>Early exit</h3>
+              <p>What accuracy–computation trade-off is achieved when inference terminates early once output confidence is sufficient?</p>
+            </article>
+          </div>
+
+          <div class="section-row">
+            <div><div class="eyebrow">EXPERIMENT PLAN</div><h2>Core validation matrix</h2></div>
+            <span class="muted-note">Proposed · not yet measured</span>
+          </div>
+          <div class="panel experiment-table-wrap">
+            <table class="experiment-table">
+              <thead>
+                <tr>
+                  <th>EXP.</th>
+                  <th>HYPOTHESIS</th>
+                  <th>VARIABLE</th>
+                  <th>OBSERVE</th>
+                  <th>STATUS</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td><b>E1</b></td><td>Event-driven execution reduces updates at high sparsity.</td><td>Execution mode / sparsity</td><td>Updates · latency · energy</td><td><span class="table-state demo-state">Demo concept</span></td></tr>
+                <tr><td><b>E2</b></td><td>Adaptive threshold reduces spikes with limited accuracy loss.</td><td>Threshold policy</td><td>Spikes · accuracy</td><td><span class="table-state planned-state">Planned</span></td></tr>
+                <tr><td><b>E3</b></td><td>Adaptive temporal resolution reduces updates at low activity.</td><td>Resolution policy</td><td>Updates · latency · accuracy</td><td><span class="table-state planned-state">Planned</span></td></tr>
+                <tr><td><b>E4</b></td><td>Early exit offers a favourable accuracy–compute trade-off.</td><td>Confidence / depth</td><td>Accuracy · layers · latency</td><td><span class="table-state planned-state">Planned</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="research-bottom">
+            <article class="panel">
+              <div class="eyebrow">METHODOLOGY</div>
+              <h3>Reproducibility by design</h3>
+              <ul class="method-list">
+                <li>Multiple random seeds and repeated runs.</li>
+                <li>Warm-up runs excluded from timing.</li>
+                <li>Hardware and software configuration recorded.</li>
+                <li>Baseline comparisons on the exact same device.</li>
+                <li>Confidence intervals and statistical tests.</li>
+                <li>Proxy metrics reported separately from physical energy.</li>
+              </ul>
+            </article>
+
+            <article class="panel">
+              <div class="eyebrow">RESEARCH POSITION</div>
+              <h3>What NEUROCORE does not claim</h3>
+              <p class="position-copy">Event-driven SNN runtimes, adaptive thresholds, dynamic timesteps and early exit already exist in prior literature. NEUROCORE does not claim these individual mechanisms as new.</p>
+              <p class="position-copy">The intended contribution is their integrated, pluggable evaluation and reproducible cross-hardware trade-off characterization.</p>
+              <span class="position-foot">EVIDENCE-DRIVEN · ADVERSARIAL · MEASUREMENT-FIRST</span>
+            </article>
+          </div>
         </section>
 
-        <footer class="global-footer"><span>© 2026 NEUROCORE RESEARCH PROJECT</span><span>ADAPTIVE EVENT-DRIVEN EDGE INTELLIGENCE</span><span>SOFTWARE PROTOTYPE · V0.1.0</span></footer>
+        <!-- GLOBAL FOOTER -->
+        <footer class="global-footer">
+          <span>© 2026 NEUROCORE RESEARCH PROJECT</span>
+          <span>ADAPTIVE EVENT-DRIVEN EDGE INTELLIGENCE</span>
+          <span>RESEARCH PLATFORM · V2.0.0</span>
+        </footer>
       </div>
     </main>
   </div>
+
+  <!-- TOAST NOTIFICATION -->
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <div class="modal-backdrop" id="infoModal"><div class="modal panel"><button class="modal-close" id="closeModal">×</button><div class="eyebrow">ABOUT THIS BUILD</div><h2>NEUROCORE <span>prototype.</span></h2><p>This is a frontend demonstration of the proposed NEUROCORE research platform. The simulation and benchmark views use simplified browser-side models and illustrative counters.</p><div class="modal-facts"><div><span>Build</span><b>0.1.0</b></div><div><span>Hardware</span><b>Not connected</b></div><div><span>Runtime</span><b>Browser demo</b></div><div><span>Data source</span><b>Simulated locally</b></div></div><button class="btn btn-primary full-button" id="modalOkay">Got it</button></div></div>
-  <script src="app.js"></script>
+
+  <!-- INFO MODAL -->
+  <div class="modal-backdrop" id="infoModal">
+    <div class="modal panel">
+      <button class="modal-close" id="closeModal">×</button>
+      <div class="eyebrow">ABOUT THIS BUILD</div>
+      <h2>NEUROCORE <span>v2.0.0</span></h2>
+      <p>This is an upgraded interactive demonstration of the NEUROCORE adaptive neuromorphic research platform. It features full 3D neural network visualizations with Three.js, a real-time Leaky Integrate-and-Fire simulation engine, scientific membrane dynamics and spike raster charts, and an interactive architecture explorer.</p>
+      <div class="modal-facts">
+        <div><span>Build</span><b>2.0.0</b></div>
+        <div><span>3D Engine</span><b>Three.js WebGL</b></div>
+        <div><span>SNN Engine</span><b>Discrete LIF</b></div>
+        <div><span>Data Source</span><b>Local Simulation</b></div>
+      </div>
+      <button class="btn btn-primary full-button" id="modalOkay">Explore Platform</button>
+    </div>
+  </div>
+
+  <!-- JAVASCRIPT MODULES & CONTROLLER -->
+  <script src="simulation-engine.js" defer></script>
+  <script src="charts.js" defer></script>
+  <script src="architecture-interactive.js" defer></script>
+  <script type="module" src="three-viz.js"></script>
+  <script src="app.js" defer></script>
 </body>
 </html>
