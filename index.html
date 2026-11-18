@@ -52,7 +52,7 @@
           <div class="system-progress"><span></span></div>
           <div class="system-foot"><span>Prototype stage</span><span>01 / 04</span></div>
         </div>
-        <div class="sidebar-footer"><span>NEUROCORE v2.2.0</span><span>·</span><span>RESEARCH PLATFORM</span></div>
+        <div class="sidebar-footer"><span>NEUROCORE v2.2.1</span><span>·</span><span>RESEARCH PLATFORM</span></div>
       </div>
     </aside>
 
@@ -83,7 +83,7 @@
               <p class="page-subtitle">Explore event-driven spiking neural networks, adaptive computation and hardware-aware benchmarking.</p>
             </div>
             <div class="heading-actions">
-              <span class="version-chip">BUILD 2.2.0</span>
+              <span class="version-chip">BUILD 2.2.1</span>
               <button class="btn btn-primary" data-goto="simulator"><span>Run a simulation</span><b>↗</b></button>
             </div>
           </div>
@@ -621,14 +621,14 @@
         </section>
 
         <!-- ════════════════════════════════════════════════════════════════
-             PAGE 3: EXPERIMENTAL BENCHMARK LAB (v2.2.0 EMPIRICAL PLATFORM)
+             PAGE 3: EXPERIMENTAL BENCHMARK LAB (v2.2.1 EMPIRICAL PLATFORM)
              ════════════════════════════════════════════════════════════════ -->
         <section class="page" id="page-benchmarks">
           <div class="page-heading compact-heading">
             <div>
-              <div class="eyebrow"><span class="eyebrow-line"></span> EMPIRICAL SNN EVALUATION PLATFORM / V2.2.0</div>
+              <div class="eyebrow"><span class="eyebrow-line"></span> EMPIRICAL SNN EVALUATION PLATFORM / V2.2.1</div>
               <h1>Experimental <span>benchmark lab.</span></h1>
-              <p class="page-subtitle">Execute multi-trial simulations using the actual SNN engine, compute sample statistics (Mean ± SD), evaluate paired execution modes on identical seeds, and export reproducible experimental datasets.</p>
+              <p class="page-subtitle">Execute multi-trial simulations using the actual SNN engine, compute sample statistics (Mean ± SD [95% CI]), evaluate paired execution modes on identical seeds, and export reproducible experimental datasets.</p>
             </div>
             <span class="simulation-badge" id="benchCampaignStatus"><span class="pulse-dot"></span> BENCHMARK READY</span>
           </div>
@@ -641,6 +641,7 @@
                 <button class="mode-pill selected" data-preset="quick" title="10 paired repetitions at 48 neurons, 70% sparsity">Quick (10 Paired Reps)</button>
                 <button class="mode-pill" data-preset="sparsity_sweep" title="Multi-point sweep across 50%, 70%, 80%, 90%, 95% input sparsity">Sparsity Sweep (50%–95%)</button>
                 <button class="mode-pill" data-preset="scale_sweep" title="Multi-scale sweep across 24, 48, 72, 96 neurons">Scaling Sweep (24–96 Nodes)</button>
+                <button class="mode-pill" data-preset="factorial" title="Crossed Factorial Matrix: 4 sizes x 4 sparsities x 10 paired reps (320 runs)">Full Factorial (4×4 Matrix)</button>
                 <button class="mode-pill" data-preset="custom" title="Custom configuration and repetition count">Custom Experiment</button>
               </div>
             </div>
@@ -861,6 +862,7 @@
                     <th>N</th>
                     <th>Mean</th>
                     <th>Sample SD (n-1)</th>
+                    <th>95% CI</th>
                     <th>Median</th>
                     <th>Min</th>
                     <th>Max</th>
@@ -869,7 +871,7 @@
                 </thead>
                 <tbody id="expResultsTbody">
                   <tr>
-                    <td colspan="9" class="empty-table">No completed trials. Click "Run Experiment Campaign" to execute empirical simulations.</td>
+                    <td colspan="10" class="empty-table">No completed trials. Click "Run Experiment Campaign" to execute empirical simulations.</td>
                   </tr>
                 </tbody>
               </table>
@@ -1157,7 +1159,7 @@
         <footer class="global-footer">
           <span>© 2026 NEUROCORE RESEARCH PROJECT</span>
           <span>ADAPTIVE EVENT-DRIVEN EDGE INTELLIGENCE</span>
-          <span>RESEARCH PLATFORM · V2.2.0</span>
+          <span>RESEARCH PLATFORM · V2.2.1</span>
         </footer>
       </div>
     </main>
@@ -1171,10 +1173,10 @@
     <div class="modal panel">
       <button class="modal-close" id="closeModal">×</button>
       <div class="eyebrow">ABOUT THIS BUILD</div>
-      <h2>NEUROCORE <span>v2.2.0</span></h2>
-      <p>This is an upgraded interactive demonstration of the NEUROCORE adaptive neuromorphic research platform. It features full 3D neural network visualizations with Three.js, a genuine sparse event-driven Leaky Integrate-and-Fire simulation engine, empirical multi-trial statistical benchmarking with paired execution comparisons, scientific membrane dynamics and spike raster charts, and an interactive architecture explorer.</p>
+      <h2>NEUROCORE <span>v2.2.1</span></h2>
+      <p>This is an upgraded interactive demonstration of the NEUROCORE adaptive neuromorphic research platform. It features full 3D neural network visualizations with Three.js, a mathematically validated Leaky Integrate-and-Fire simulation engine with lazy membrane potential decay and differential parity verification, empirical multi-trial statistical benchmarking with Student's t distribution 95% confidence intervals, scientific membrane dynamics and spike raster charts, and reproducible research exports.</p>
       <div class="modal-facts">
-        <div><span>Build</span><b>2.2.0</b></div>
+        <div><span>Build</span><b>2.2.1</b></div>
         <div><span>3D Engine</span><b>Three.js WebGL</b></div>
         <div><span>SNN Engine</span><b>Discrete LIF</b></div>
         <div><span>Benchmark</span><b>Empirical Multi-Trial</b></div>

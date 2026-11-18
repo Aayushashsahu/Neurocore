@@ -1,6 +1,6 @@
 /**
  * NEUROCORE — Adaptive Event-Driven Neuromorphic Computing Platform
- * Main Frontend Application Controller (v2.2.0)
+ * Main Frontend Application Controller (v2.2.1)
  *
  * Coordinates:
  * - Single-page application navigation & responsive sidebar
@@ -999,9 +999,10 @@
 
     const parityPill = $('#expParityPill');
     if (parityPill && result.parityVerification) {
+      const tol = result.parityVerification.voltageTolerance ?? result.parityVerification.tolerance ?? 1e-7;
       if (result.parityVerification.allMatched) {
         parityPill.className = 'eos-pill pass';
-        parityPill.textContent = `PARITY CHECK PASS (${result.parityVerification.parityMatchRate}%)`;
+        parityPill.textContent = `PARITY PASS (100% · ΔV ≤ ${tol.toExponential(0)})`;
       } else {
         parityPill.className = 'eos-pill fail';
         parityPill.textContent = `PARITY AUDIT: ${result.parityVerification.passedCount}/${result.parityVerification.totalPairedChecked} MATCHED`;
@@ -1026,15 +1027,17 @@
     // 3. Populate 6 Empirical KPI Cards
     if ($('#kpiEventIntegrations')) {
       $('#kpiEventIntegrations').textContent = formatMeanSD(eventIntegrations);
+      const evCi = eventIntegrations?.ciFormatted ? ` | 95% CI: ${eventIntegrations.ciFormatted}` : '';
       $('#kpiEventIntegrationsSub').textContent = eventIntegrations
-        ? `N=${eventIntegrations.n} trials | Med: ${eventIntegrations.median.toLocaleString()}`
+        ? `N=${eventIntegrations.n}${evCi} | Med: ${eventIntegrations.median.toLocaleString()}`
         : 'Mean ± Sample SD';
     }
 
     if ($('#kpiClockIntegrations')) {
       $('#kpiClockIntegrations').textContent = formatMeanSD(clockIntegrations);
+      const clCi = clockIntegrations?.ciFormatted ? ` | 95% CI: ${clockIntegrations.ciFormatted}` : '';
       $('#kpiClockIntegrationsSub').textContent = clockIntegrations
-        ? `N=${clockIntegrations.n} trials | Med: ${clockIntegrations.median.toLocaleString()}`
+        ? `N=${clockIntegrations.n}${clCi} | Med: ${clockIntegrations.median.toLocaleString()}`
         : 'Mean ± Sample SD';
     }
 
@@ -1046,7 +1049,9 @@
         $('#kpiReduction').textContent = redSD !== null && redSD !== undefined
           ? `${redMean.toFixed(1)}% ± ${redSD.toFixed(1)}%`
           : `${redMean.toFixed(1)}%`;
-        $('#kpiReductionSub').textContent = `Paired reduction (N=${primaryPair.nPaired} seeds)`;
+        const redCi = primaryPair.ciIntegrationsReductionPct;
+        const ciStr = redCi ? ` | 95% CI: [${redCi.lower.toFixed(1)}%, ${redCi.upper.toFixed(1)}%]` : '';
+        $('#kpiReductionSub').textContent = `Paired reduction (N=${primaryPair.nPaired} seeds)${ciStr}`;
       } else {
         $('#kpiReduction').textContent = '—';
         $('#kpiReductionSub').textContent = 'Algorithmic compute reduction';
@@ -1210,6 +1215,7 @@
         const stratPill = strat === 'event'
           ? '<span class="eos-pill" style="padding:2px 6px; font-size:8px;">EVENT</span>'
           : '<span class="eos-pill dim" style="padding:2px 6px; font-size:8px;">CLOCK</span>';
+        const ciFormatted = s.ciFormatted || (s.confidenceInterval95 ? s.confidenceInterval95.formatted : (s.ciLower !== null && s.ciUpper !== null && s.ciLower !== undefined ? `[${s.ciLower.toFixed(1)}, ${s.ciUpper.toFixed(1)}]` : 'N/A'));
 
         tr.innerHTML = `
           <td><strong>${s.metric}</strong></td>
@@ -1217,6 +1223,7 @@
           <td class="num">${s.n}</td>
           <td class="num" style="color: ${strat === 'event' ? 'var(--cyan)' : 'var(--text)'}; font-weight:600;">${meanFormatted}</td>
           <td class="num" style="color: var(--muted);">${sdFormatted}</td>
+          <td class="num" style="color: var(--cyan); font-family: var(--font-mono); font-size: 10px;">${ciFormatted}</td>
           <td class="num">${medFormatted}</td>
           <td class="num">${minFormatted}</td>
           <td class="num">${maxFormatted}</td>
@@ -1370,6 +1377,9 @@
         } else if (currentCampaignPreset === 'scale_sweep') {
           if ($('#expReps')) $('#expReps').value = '5';
           toast('Selected Campaign: Scaling Sweep (24–96 Nodes)');
+        } else if (currentCampaignPreset === 'factorial') {
+          if ($('#expReps')) $('#expReps').value = '10';
+          toast('Selected Campaign: Full Factorial Matrix (4 sizes × 4 sparsities × 10 paired reps = 320 runs)');
         } else if (currentCampaignPreset === 'custom') {
           toast('Selected Campaign: Custom Experiment');
         }

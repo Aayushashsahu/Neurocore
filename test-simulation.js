@@ -1,12 +1,13 @@
 /**
- * NEUROCORE v2.1.1 — Comprehensive SNN Simulation Engine Automated Test Suite
+ * NEUROCORE v2.2.1 — Comprehensive SNN Simulation Engine Automated Test Suite
  *
  * Verifies:
- * - Suite A: LIF Neuron Model Dynamics & Invariants
- * - Suite B: Sparse Event-Driven Scheduler & Geometric Skip-Sampler
- * - Suite C: Execution Mode Comparison (Event-Driven vs Time-Stepped)
+ * - Suite A: LIF Neuron Model Dynamics & Invariants (leakage, thresholds, refractory, ceilings)
+ * - Suite B: Sparse Event-Driven Scheduler, Geometric Skip-Sampler & Multi-Leak Lazy Decay
+ * - Suite C: Execution Mode Comparison (Spike parity, raster match, operation counter audit)
  * - Suite D: Conservation Invariant: Scheduled = Delivered + Pending
  * - Suite E: Deterministic Reproducibility with Seeded PRNG
+ * - Suite F: Adaptive Policies Validation (Threshold adaptation bounds, temporal binning)
  */
 
 const { SimulationEngine, LIFNeuron, SynapticConnection, EventQueue, SeededPRNG } = require('./simulation-engine.js');
@@ -31,7 +32,7 @@ function assertClose(a, b, epsilon = 1e-6, message = '') {
 }
 
 console.log('===============================================================');
-console.log('  NEUROCORE v2.1.1 AUTOMATED SIMULATION ENGINE TEST SUITE');
+console.log('  NEUROCORE v2.2.1 AUTOMATED SIMULATION ENGINE TEST SUITE');
 console.log('===============================================================\n');
 
 // ════════════════════════════════════════════════════════════════
@@ -118,16 +119,21 @@ console.log('\n--- SUITE B: Sparse Event-Driven Scheduler & Geometric Sampler --
   assert(engine.neuronIntegrations === 24, 'B2.2: Evaluates all 24 active neurons');
 }
 
-// B3: Mathematical Equivalence of Lazy Decay vs Step-by-Step Decay
+// B3: Mathematical Equivalence of Lazy Decay vs Step-by-Step Decay across 5 leak factors
 {
-  const n = new LIFNeuron(0, { leakFactor: 0.78, resetVoltage: 0.0 });
-  n.integrateAndFire(0.5, 0); // V = 0.5 at step 0
-  assertClose(n.membranePotential, 0.5, 1e-12, 'B3.1: Initial potential set to 0.5 at step 0');
+  const leakFactors = [0.50, 0.70, 0.85, 0.95, 0.99];
+  let leakTestsPassed = 0;
+  for (const leak of leakFactors) {
+    const n = new LIFNeuron(0, { leakFactor: leak, resetVoltage: 0.0 });
+    n.integrateAndFire(0.5, 0); // V = 0.5 at step 0
 
-  // Let 10 steps elapse without input, then query step 10
-  const decayedV = n.lazyDecay(10);
-  const expectedV = 0.5 * Math.pow(0.78, 10);
-  assertClose(decayedV, expectedV, 1e-12, 'B3.2: Lazy decay over 10 steps matches mathematical power function');
+    // 10 steps of idle decay
+    const decayedV = n.lazyDecay(10);
+    const expectedV = 0.5 * Math.pow(leak, 10);
+    assertClose(decayedV, expectedV, 1e-12, `B3: Lazy decay equivalence at leak factor ${leak}`);
+    leakTestsPassed++;
+  }
+  assert(leakTestsPassed === 5, 'B3.1: Verified mathematical lazy decay across all 5 standard leak factors (0.50, 0.70, 0.85, 0.95, 0.99)');
 }
 
 // B4: Lazy Decay with Intervening Refractory Period
@@ -147,7 +153,7 @@ console.log('\n--- SUITE B: Sparse Event-Driven Scheduler & Geometric Sampler --
 }
 
 // ════════════════════════════════════════════════════════════════
-// SUITE C: EXECUTION-MODE COMPARISON (EVENT-DRIVEN VS TIME-STEPPED)
+// SUITE C: EXECUTION-MODE COMPARISON & OPERATION COUNTER AUDIT
 // ════════════════════════════════════════════════════════════════
 console.log('\n--- SUITE C: Execution-Mode Comparison (Event-Driven vs Time-Stepped) ---');
 
@@ -188,6 +194,13 @@ console.log('\n--- SUITE C: Execution-Mode Comparison (Event-Driven vs Time-Step
   console.log(`    Time-stepped integrations: ${clockState.neuronIntegrations}`);
   console.log(`    Event-driven integrations: ${eventState.neuronIntegrations}`);
   assert(eventState.neuronIntegrations < clockState.neuronIntegrations, 'C5: Event-driven execution achieves genuine reduction in neuron integrations');
+
+  // Verify operation counter integrity: clock mode must NOT count lazy decay evaluations!
+  assert(clockState.lazyDecayEvaluations === 0, 'C6.1: Clock mode does not classify ordinary updates as lazy decay (lazyDecayEvaluations === 0)');
+  assert(eventState.lazyDecayEvaluations > 0, `C6.2: Event mode performs actual lazy decay evaluations (${eventState.lazyDecayEvaluations})`);
+  assert(clockState.clockEvaluations === 36 * 30, `C6.3: Clock evaluations equals N x steps (${clockState.clockEvaluations})`);
+  assert(clockState.refractoryChecks === 36 * 30, 'C6.4: Clock mode performs refractory check for every neuron evaluation');
+  assert(clockState.thresholdEvaluations > 0, 'C6.5: Threshold comparisons tracked accurately');
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -252,6 +265,76 @@ console.log('\n--- SUITE E: Deterministic Reproducibility with Seeded PRNG ---')
   const st3 = e3.getState();
 
   assert(st1.spikeCount !== st3.spikeCount || st1.deliveredEvents !== st3.deliveredEvents, 'E3: Different seeds produce distinct simulation runs');
+}
+
+// ════════════════════════════════════════════════════════════════
+// SUITE F: ADAPTIVE POLICIES VALIDATION
+// ════════════════════════════════════════════════════════════════
+console.log('\n--- SUITE F: Adaptive Policies Validation ---');
+
+// F1: Adaptive Threshold Dynamics
+{
+  const engine = new SimulationEngine({
+    neuronCount: 20,
+    inputSparsity: 0.0, // High activity ensures active ratio > 0.15
+    firingThreshold: 0.65,
+    adaptiveThreshold: true,
+    seed: 42,
+  });
+  engine.init({
+    neuronCount: 20,
+    inputSparsity: 0.0,
+    firingThreshold: 0.65,
+    adaptiveThreshold: true,
+    seed: 42,
+  });
+
+  const initialThresh = engine.thresholdHistory[0];
+  assert(initialThresh === 0.65, 'F1.1: Initial threshold matches configured value (0.65)');
+
+  // Run steps and observe threshold modulation
+  for (let s = 0; s < 10; s++) engine.step();
+  const finalThresh = engine.thresholdHistory[engine.thresholdHistory.length - 1];
+  assert(finalThresh <= 1.1 && finalThresh >= 0.2, `F1.2: Adaptive threshold stays within [0.2, 1.1] bounds (${finalThresh})`);
+
+  // Verify all neurons received updated threshold
+  const allSynced = engine.neurons.every(n => Math.abs(n.threshold - finalThresh) < 1e-9);
+  assert(allSynced, 'F1.3: All neurons remain synchronized with adaptive threshold');
+
+  // Verify reset restores initial threshold
+  engine.reset();
+  assert(engine.thresholdHistory[0] === 0.65, 'F1.4: Reset restores initial firing threshold');
+  assert(engine.neurons.every(n => n.threshold === 0.65), 'F1.5: Neurons reset to configured threshold');
+}
+
+// F2: Adaptive Temporal Binning Mechanism
+{
+  const engine = new SimulationEngine({
+    neuronCount: 24,
+    inputSparsity: 0.95, // High sparsity triggers bin size 2 (sparsity >= 0.65)
+    firingThreshold: 0.65,
+    adaptiveTemporal: true,
+    seed: 42,
+  });
+  engine.init({
+    neuronCount: 24,
+    inputSparsity: 0.95,
+    firingThreshold: 0.65,
+    adaptiveTemporal: true,
+    seed: 42,
+  });
+
+  // Step 0 is step % 2 === 0 (isBinStep true)
+  engine.step();
+  // Step 1 is step % 2 !== 0 (deferred step)
+  engine.step();
+
+  assert(engine.binSizeHistory.length >= 2, 'F2.1: Bin size transitions recorded in history');
+  assert(engine.binSizeHistory.includes(2), 'F2.2: Sparse activity triggers bin size 2');
+
+  // Characterize that adaptive temporal binning is an approximation policy
+  engine.reset();
+  assert(engine.binSizeHistory.length === 0, 'F2.3: Reset clears temporal binning state');
 }
 
 console.log('\n===============================================================');

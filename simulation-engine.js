@@ -6,7 +6,7 @@
  * modes, adaptive threshold policies, and adaptive temporal binning.
  * 
  * @file simulation-engine.js
- * @version 2.1.1
+ * @version 2.2.1
  * @license MIT
  */
 
@@ -455,7 +455,7 @@ class SimulationEngine {
     /** @type {number} Cumulative wall-clock execution duration across steps (ms). */
     this.totalExecutionMs = 0;
     /** @type {string} Simulation algorithm engine release version. */
-    this.simEngineVersion = '2.1.1-sparse';
+    this.simEngineVersion = '2.2.1-validated';
 
     /** @type {number} ID of neuron currently inspected in frontend charts. */
     this.inspectedNeuronId = 0;
@@ -531,7 +531,7 @@ class SimulationEngine {
     let sparsity = config.inputSparsity ?? config.sparsity ?? 0.7;
     if (sparsity > 1) sparsity = sparsity / 100;
     const seed = config.seed !== undefined ? config.seed : 42;
-    const executionMode = config.executionMode || config.mode || 'event';
+    const executionMode = config.executionMode || config.mode || (config.executionStrategy === 'discrete' ? 'clock' : 'event');
     const steps = config.steps || config.simulationSteps || 30;
 
     this.config = {
@@ -604,8 +604,11 @@ class SimulationEngine {
     this.isRunning = false;
     this.isPaused = false;
     this.currentStep = 0;
+    this.clockEvaluations = 0;
     this.neuronIntegrations = 0;
     this.lazyDecayEvaluations = 0;
+    this.thresholdEvaluations = 0;
+    this.refractoryChecks = 0;
     this.externalInputEvents = 0;
     this.updateCount = 0;
     this.totalSpikeCount = 0;
@@ -763,7 +766,7 @@ class SimulationEngine {
     }
 
     let v = 0.0;
-    let refUntil = 0;
+    let refUntil = -1;
     const maxSteps = Math.max(1, this.currentStep);
 
     for (let s = 0; s < maxSteps; s++) {
@@ -873,8 +876,14 @@ class SimulationEngine {
         n.lazyDecay(step);
         this.lazyDecayEvaluations++;
 
+        this.refractoryChecks++;
+        const isRefractory = step <= n.refractoryUntil;
+        if (!isRefractory) {
+          this.neuronIntegrations++;
+          this.thresholdEvaluations++;
+        }
+
         // Integrate incoming current & test threshold crossing
-        this.neuronIntegrations++;
         const spiked = n.integrateAndFire(inp, step);
 
         if (spiked) {
@@ -902,8 +911,16 @@ class SimulationEngine {
       // Evaluates every single neuron unconditionally at every timestep.
       for (const n of this.neurons) {
         const inp = inputMap.get(n.id) ?? 0;
-        this.lazyDecayEvaluations++;
-        this.neuronIntegrations++;
+        this.clockEvaluations++;
+        this.refractoryChecks++;
+
+        const isRefractory = n.refractoryTimer > 0;
+        if (!isRefractory) {
+          this.neuronIntegrations++;
+          this.thresholdEvaluations++;
+        }
+
+        // Ordinary time-stepped membrane updates are NOT lazy decay evaluations (lazyDecayEvaluations remains 0 in clock mode)
         const spiked = n.update(inp, step);
 
         if (spiked) {
@@ -927,8 +944,8 @@ class SimulationEngine {
       }
     }
 
-    // Alias for compatibility
-    this.updateCount = this.neuronIntegrations;
+    // Compatibility alias: updateCount reflects active integrations in event mode, clock evaluations in clock mode
+    this.updateCount = isEventDriven ? this.neuronIntegrations : this.clockEvaluations;
 
     // --- 3. Event Accounting Invariant Assertion ---
     // Scheduled Synaptic Events = Delivered Synaptic Events + Pending Synaptic Events
@@ -1128,9 +1145,12 @@ class SimulationEngine {
       active,
       inactive,
       spikeCount: this.totalSpikeCount,
-      updateCount: this.neuronIntegrations, // compatibility alias
+      updateCount: this.updateCount,
+      clockEvaluations: this.clockEvaluations,
       neuronIntegrations: this.neuronIntegrations,
       lazyDecayEvaluations: this.lazyDecayEvaluations,
+      thresholdEvaluations: this.thresholdEvaluations,
+      refractoryChecks: this.refractoryChecks,
       externalInputEvents: this.externalInputEvents,
       scheduledEvents: this.scheduledEventCount,
       deliveredEvents: this.deliveredEventCount,

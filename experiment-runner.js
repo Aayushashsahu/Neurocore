@@ -1,13 +1,15 @@
 /**
- * NEUROCORE — Experimental Runner & Statistical Benchmarking Engine (v2.2.0)
+ * NEUROCORE — Experimental Runner & Statistical Benchmarking Engine (v2.2.1)
  * 
- * Provides reproducible, multi-trial empirical SNN simulation campaigns,
- * sample statistics calculation (Mean, Sample SD with n-1 denominator, Median, Min, Max),
- * paired-seed comparison between Event-Driven and Time-Stepped execution strategies,
- * scientific parity verification, and structured data exports (CSV & JSON).
+ * Provides rigorous, reproducible, multi-trial empirical SNN simulation campaigns,
+ * Student's t distribution 95% confidence intervals, sample statistics calculation
+ * (Mean, Sample SD with n-1 denominator, Median, Min, Max), paired-seed differential
+ * parity audit (topologies, stochastic input sequences, spike rasters, and step-by-step
+ * membrane trajectories), balanced alternating execution order, warm-up isolation,
+ * crossed factorial campaigns, and structured data exports (CSV & JSON).
  * 
  * @file experiment-runner.js
- * @version 2.2.0
+ * @version 2.2.1
  * @license MIT
  */
 
@@ -25,7 +27,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function(SimulationEngineClass, SeededPRNGClass) {
 
   /* ══════════════════════════════════════════════════════════════════════════
-   * 1. RIGOROUS STATISTICAL HELPER FUNCTIONS
+   * 1. RIGOROUS STATISTICAL HELPER FUNCTIONS & CONFIDENCE INTERVALS
    * ══════════════════════════════════════════════════════════════════════════ */
 
   /**
@@ -43,7 +45,7 @@
   }
 
   /**
-   * Calculate sample standard deviation with (n - 1) denominator.
+   * Calculate sample standard deviation with unbiased (n - 1) Bessel's correction denominator.
    * Returns null if n < 2 (cannot calculate sample standard deviation).
    * @param {number[]} arr
    * @returns {number|null}
@@ -61,6 +63,7 @@
 
   /**
    * Calculate median of a numeric array.
+   * Handles both odd and even sample sizes.
    * @param {number[]} arr
    * @returns {number}
    */
@@ -103,6 +106,151 @@
   }
 
   /**
+   * Two-tailed 95% critical value t_(0.975, df) from Student's t distribution.
+   * Uses exact statistical values for df=1..40, 50, 60, 70, 80, 90, 100, 120 and
+   * high-precision Cornish-Fisher expansion for larger df.
+   * 
+   * @param {number} df Degrees of freedom (n - 1)
+   * @returns {number|null} t-critical value, or null if df < 1
+   */
+  function tCritical95(df) {
+    if (typeof df !== 'number' || isNaN(df) || df < 1) return null;
+    const roundedDf = Math.round(df);
+
+    const table = {
+      1: 12.7062, 2: 4.3027, 3: 3.1824, 4: 2.7764, 5: 2.5706,
+      6: 2.4469, 7: 2.3646, 8: 2.3060, 9: 2.2622, 10: 2.2281,
+      11: 2.2010, 12: 2.1788, 13: 2.1604, 14: 2.1448, 15: 2.1314,
+      16: 2.1199, 17: 2.1098, 18: 2.1009, 19: 2.0930, 20: 2.0860,
+      21: 2.0796, 22: 2.0739, 23: 2.0687, 24: 2.0639, 25: 2.0595,
+      26: 2.0555, 27: 2.0518, 28: 2.0484, 29: 2.0452, 30: 2.0423,
+      31: 2.0395, 32: 2.0369, 33: 2.0345, 34: 2.0322, 35: 2.0301,
+      36: 2.0281, 37: 2.0262, 38: 2.0244, 39: 2.0227, 40: 2.0211,
+      50: 2.0086, 60: 2.0003, 70: 1.9944, 80: 1.9901, 90: 1.9867,
+      100: 1.9840, 120: 1.9799,
+    };
+
+    if (table[roundedDf] !== undefined) {
+      return table[roundedDf];
+    }
+
+    // High-accuracy Cornish-Fisher expansion for intermediate or large df:
+    // t ≈ z + (z^3 + z)/(4*df) + (5*z^5 + 16*z^3 + 3*z)/(96*df^2)
+    const z = 1.959963984540054; // standard normal 0.975 quantile
+    const z3 = z * z * z;
+    const z5 = z3 * z * z;
+    const term1 = (z3 + z) / (4 * roundedDf);
+    const term2 = (5 * z5 + 16 * z3 + 3 * z) / (96 * roundedDf * roundedDf);
+    return Number((z + term1 + term2).toFixed(4));
+  }
+
+  /**
+   * Calculate 95% confidence interval for a numeric sample using Student's t distribution.
+   * Returns null if n < 2.
+   * 
+   * @param {number[]} arr
+   * @returns {object|null}
+   */
+  function confidenceInterval95(arr) {
+    if (!arr || arr.length < 2) return null;
+    const n = arr.length;
+    const m = mean(arr);
+    const sd = sampleStdDev(arr);
+    if (sd === null) return null;
+    const df = n - 1;
+    const tCrit = tCritical95(df);
+    if (tCrit === null) return null;
+    const sem = sd / Math.sqrt(n);
+    const marginOfError = tCrit * sem;
+    return {
+      n,
+      df,
+      mean: m,
+      sd,
+      sem,
+      tCritical: Number(tCrit.toFixed(4)),
+      marginOfError: Number(marginOfError.toFixed(4)),
+      lower: Number((m - marginOfError).toFixed(4)),
+      upper: Number((m + marginOfError).toFixed(4)),
+      formatted: `[${(m - marginOfError).toFixed(2)}, ${(m + marginOfError).toFixed(2)}]`,
+    };
+  }
+
+  /**
+   * Compute paired differences D_i = clock[i] - event[i] and comprehensive statistics.
+   * @param {number[]} clockVals
+   * @param {number[]} eventVals
+   * @returns {object}
+   */
+  function pairedDifferences(clockVals, eventVals) {
+    const n = Math.min(clockVals.length, eventVals.length);
+    const diffs = [];
+    for (let i = 0; i < n; i++) {
+      diffs.push(clockVals[i] - eventVals[i]);
+    }
+    const m = mean(diffs);
+    const sd = sampleStdDev(diffs);
+    const ci = confidenceInterval95(diffs);
+    return {
+      n,
+      values: diffs,
+      mean: m,
+      sd,
+      sampleStdDev: sd,
+      median: median(diffs),
+      min: min(diffs),
+      max: max(diffs),
+      confidenceInterval95: ci,
+      ciFormatted: ci ? ci.formatted : 'N/A',
+    };
+  }
+
+  /**
+   * Compute paired percentage reductions R_i = ((clock[i] - event[i]) / clock[i]) * 100%.
+   * Handles zero denominators explicitly without distorting data.
+   * @param {number[]} clockVals
+   * @param {number[]} eventVals
+   * @returns {object}
+   */
+  function pairedPercentageReductions(clockVals, eventVals) {
+    const n = Math.min(clockVals.length, eventVals.length);
+    const reductions = [];
+    let zeroDenominatorCount = 0;
+
+    for (let i = 0; i < n; i++) {
+      const c = clockVals[i];
+      const e = eventVals[i];
+      if (c === 0) {
+        zeroDenominatorCount++;
+        if (e === 0) {
+          reductions.push(0); // identical zero activity
+        }
+        // If e > 0 with c = 0, mathematically undefined; excluded from average
+      } else {
+        reductions.push(((c - e) / c) * 100);
+      }
+    }
+
+    const m = mean(reductions);
+    const sd = sampleStdDev(reductions);
+    const ci = confidenceInterval95(reductions);
+    return {
+      nTotal: n,
+      validPairs: reductions.length,
+      zeroDenominatorCount,
+      values: reductions,
+      mean: m,
+      sd,
+      sampleStdDev: sd,
+      median: median(reductions),
+      min: min(reductions),
+      max: max(reductions),
+      confidenceInterval95: ci,
+      ciFormatted: ci ? ci.formatted : 'N/A',
+    };
+  }
+
+  /**
    * Deterministically derive repetition seed from base seed and repetition index.
    * @param {number} baseSeed
    * @param {number} repIndex
@@ -116,7 +264,9 @@
   }
 
   /**
-   * Compute comprehensive statistical summary for an array of metric values.
+   * Compute comprehensive statistical summary for an array of metric values,
+   * including 95% confidence intervals.
+   * 
    * @param {number[]} values
    * @param {string} metric
    * @param {string} unit
@@ -130,6 +280,7 @@
     const med = median(values);
     const mn = min(values);
     const mx = max(values);
+    const ci = confidenceInterval95(values);
     return {
       metric,
       unit,
@@ -142,12 +293,182 @@
       median: med,
       min: mn,
       max: mx,
+      confidenceInterval95: ci,
+      ciLower: ci ? ci.lower : null,
+      ciUpper: ci ? ci.upper : null,
+      ciMarginOfError: ci ? ci.marginOfError : null,
+      ciFormatted: ci ? ci.formatted : 'N/A',
       formatted: sd !== null ? `${m.toFixed(1)} ± ${sd.toFixed(1)}` : `${m.toFixed(1)} (N=1)`,
     };
   }
 
   /* ══════════════════════════════════════════════════════════════════════════
-   * 2. SINGLE TRIAL RUNNER
+   * 2. COMPREHENSIVE DIFFERENTIAL PARITY VERIFICATION
+   * ══════════════════════════════════════════════════════════════════════════ */
+
+  /**
+   * Complete 5-part differential parity verifier between Clock and Event simulation runs.
+   * Compares:
+   * 1. Network Topology (Neuron count, connection count, per-connection src/tgt/weight/delay)
+   * 2. External Input Sequence (Stochastic event count, targets, stimulus consistency)
+   * 3. Neuron-Level Spike Rasters (Exact per-neuron spike timestamps: Clock[i] === Event[i])
+   * 4. Step-by-Step Membrane Trajectories (|V_clock(i,t) - V_event(i,t)| <= tolerance)
+   * 5. Synaptic Event Accounting (Scheduled, delivered, queue conservation)
+   * 
+   * @param {object} clockEngine Time-stepped reference SimulationEngine instance
+   * @param {object} eventEngine Event-driven SimulationEngine instance
+   * @param {object} [options]
+   * @param {number} [options.voltageTolerance=1e-7] Floating-point comparison tolerance
+   * @returns {object} Detailed parity audit report
+   */
+  function verifyDifferentialParity(clockEngine, eventEngine, options = {}) {
+    const tolerance = options.voltageTolerance ?? 1e-7;
+    const nNeurons = clockEngine.neurons ? clockEngine.neurons.length : 0;
+    const steps = clockEngine.currentStep ?? 0;
+
+    // 1. Topology Parity
+    const cTopo = typeof clockEngine.getTopology === 'function' ? clockEngine.getTopology() : { neuronCount: 0, connectionCount: 0, connections: [] };
+    const eTopo = typeof eventEngine.getTopology === 'function' ? eventEngine.getTopology() : { neuronCount: 0, connectionCount: 0, connections: [] };
+    let topologyMismatches = 0;
+    if (cTopo.neuronCount !== eTopo.neuronCount) topologyMismatches++;
+    if (cTopo.connectionCount !== eTopo.connectionCount) topologyMismatches++;
+    const topoCount = Math.min(cTopo.connections.length, eTopo.connections.length);
+    for (let i = 0; i < topoCount; i++) {
+      const c = cTopo.connections[i];
+      const e = eTopo.connections[i];
+      if (c.sourceId !== e.sourceId || c.targetId !== e.targetId ||
+          Math.abs(c.weight - e.weight) > 1e-9 || c.delay !== e.delay) {
+        topologyMismatches++;
+      }
+    }
+    const topologyPassed = topologyMismatches === 0;
+
+    // 2. Input Parity
+    const inputPassed = (clockEngine.externalInputEvents === eventEngine.externalInputEvents);
+
+    // 3. Spike Raster Parity (per-neuron exact timestamps)
+    let rasterMismatches = 0;
+    let firstRasterDivergence = null;
+    for (let i = 0; i < nNeurons; i++) {
+      const cSpikes = clockEngine.spikeRaster?.get ? (clockEngine.spikeRaster.get(i) || []) : [];
+      const eSpikes = eventEngine.spikeRaster?.get ? (eventEngine.spikeRaster.get(i) || []) : [];
+      if (cSpikes.length !== eSpikes.length) {
+        rasterMismatches++;
+        if (!firstRasterDivergence) {
+          firstRasterDivergence = { neuronId: i, clockSpikes: cSpikes.slice(), eventSpikes: eSpikes.slice() };
+        }
+      } else {
+        for (let s = 0; s < cSpikes.length; s++) {
+          if (cSpikes[s] !== eSpikes[s]) {
+            rasterMismatches++;
+            if (!firstRasterDivergence) {
+              firstRasterDivergence = { neuronId: i, clockSpikes: cSpikes.slice(), eventSpikes: eSpikes.slice(), divergentStep: cSpikes[s] };
+            }
+            break;
+          }
+        }
+      }
+    }
+    const rasterPassed = rasterMismatches === 0;
+
+    // 4. Step-by-Step Membrane Potential Trajectory Parity
+    let trajectoryComparisons = 0;
+    let trajectoryMismatches = 0;
+    let maxVoltageDelta = 0;
+    let firstTrajectoryDivergence = null;
+
+    if (typeof clockEngine.getNeuronHistory === 'function' && typeof eventEngine.getNeuronHistory === 'function') {
+      for (let i = 0; i < nNeurons; i++) {
+        const cHist = clockEngine.getNeuronHistory(i);
+        const eHist = eventEngine.getNeuronHistory(i);
+        const len = Math.min(cHist.length, eHist.length, steps);
+        for (let s = 0; s < len; s++) {
+          trajectoryComparisons++;
+          const cv = cHist[s] ?? 0;
+          const ev = eHist[s] ?? 0;
+          const delta = Math.abs(cv - ev);
+          if (delta > maxVoltageDelta) maxVoltageDelta = delta;
+          if (delta > tolerance) {
+            trajectoryMismatches++;
+            if (!firstTrajectoryDivergence) {
+              firstTrajectoryDivergence = {
+                neuronId: i,
+                step: s,
+                clockVoltage: cv,
+                eventVoltage: ev,
+                delta,
+              };
+            }
+          }
+        }
+      }
+    }
+    const trajectoryPassed = trajectoryMismatches === 0;
+
+    // 5. Synaptic Events Parity
+    const synapticPassed = (clockEngine.scheduledEventCount === eventEngine.scheduledEventCount || clockEngine.scheduledEvents === eventEngine.scheduledEvents) &&
+                           (clockEngine.deliveredEventCount === eventEngine.deliveredEventCount || clockEngine.deliveredEvents === eventEngine.deliveredEvents);
+
+    const allPassed = topologyPassed && inputPassed && rasterPassed && trajectoryPassed && synapticPassed;
+
+    const diagnostics = [];
+    if (!topologyPassed) diagnostics.push(`Topology mismatch: ${topologyMismatches} discrepancies`);
+    if (!inputPassed) diagnostics.push(`External input count mismatch: Clock ${clockEngine.externalInputEvents} vs Event ${eventEngine.externalInputEvents}`);
+    if (!rasterPassed) diagnostics.push(`Spike raster mismatch across ${rasterMismatches} neurons. First divergence at neuron ${firstRasterDivergence ? firstRasterDivergence.neuronId : 'N/A'}`);
+    if (!trajectoryPassed) diagnostics.push(`Membrane trajectory mismatch: ${trajectoryMismatches} point(s) exceeded tolerance ${tolerance}. Max delta: ${maxVoltageDelta}`);
+    if (!synapticPassed) diagnostics.push('Synaptic event count mismatch between clock and event engines');
+
+    return {
+      allPassed,
+      isParity: allPassed,
+      tolerance,
+      voltageTolerance: tolerance,
+      topologyParity: topologyPassed,
+      inputParity: inputPassed,
+      rasterParity: rasterPassed,
+      trajectoryParity: trajectoryPassed,
+      synapticEventsParity: synapticPassed,
+      maxVoltageDiff: maxVoltageDelta,
+      diagnostics,
+      topology: {
+        passed: topologyPassed,
+        connectionCount: cTopo.connectionCount,
+        mismatches: topologyMismatches,
+      },
+      input: {
+        passed: inputPassed,
+        clockInputs: clockEngine.externalInputEvents,
+        eventInputs: eventEngine.externalInputEvents,
+      },
+      spikeRaster: {
+        passed: rasterPassed,
+        mismatchedNeurons: rasterMismatches,
+        clockTotalSpikes: clockEngine.totalSpikeCount ?? clockEngine.spikeCount,
+        eventTotalSpikes: eventEngine.totalSpikeCount ?? eventEngine.spikeCount,
+        firstDivergence: firstRasterDivergence,
+      },
+      membraneTrajectory: {
+        passed: trajectoryPassed,
+        totalComparisons: trajectoryComparisons,
+        mismatches: trajectoryMismatches,
+        maxVoltageDelta,
+        firstDivergence: firstTrajectoryDivergence,
+      },
+      synapticEvents: {
+        passed: synapticPassed,
+        clockScheduled: clockEngine.scheduledEventCount ?? clockEngine.scheduledEvents,
+        eventScheduled: eventEngine.scheduledEventCount ?? eventEngine.scheduledEvents,
+        clockDelivered: clockEngine.deliveredEventCount ?? clockEngine.deliveredEvents,
+        eventDelivered: eventEngine.deliveredEventCount ?? eventEngine.deliveredEvents,
+      },
+      summary: allPassed
+        ? `FULL DIFFERENTIAL PARITY VERIFIED (${trajectoryComparisons} trajectory points, max delta: ${maxVoltageDelta.toExponential(2)})`
+        : `DIFFERENTIAL MISMATCH: ${rasterMismatches} raster / ${trajectoryMismatches} trajectory divergences`,
+    };
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+   * 3. SINGLE TRIAL RUNNER
    * ══════════════════════════════════════════════════════════════════════════ */
 
   /**
@@ -174,6 +495,9 @@
       simulationSteps = 50,
       adaptiveThreshold = false,
       adaptiveTemporal = false,
+      executionOrder = 1,
+      pairOrder = 'clock-first',
+      isWarmup = false,
     } = trialParams;
 
     // Fresh isolated engine instance
@@ -223,8 +547,23 @@
       });
     }
 
-    // Parity signature for verification across modes
+    // Parity signature for quick matching
     const paritySignature = `${engine.totalSpikeCount}_${engine.deliveredEventCount}_${spikeTimes.length}`;
+
+    // Extract compact membrane histories for differential parity audit
+    const membraneHistories = {};
+    if (typeof engine.getNeuronHistory === 'function' && engine.neurons) {
+      for (let i = 0; i < engine.neurons.length; i++) {
+        membraneHistories[i] = engine.getNeuronHistory(i);
+      }
+    }
+
+    const spikeRasterCopy = {};
+    if (engine.spikeRaster) {
+      for (const [id, times] of engine.spikeRaster) {
+        spikeRasterCopy[id] = times.slice();
+      }
+    }
 
     return {
       experimentId,
@@ -232,6 +571,9 @@
       repetitionIndex,
       seed,
       mode,
+      executionOrder,
+      pairOrder,
+      isWarmup,
       neuronCount,
       connectionDensity,
       sparsity,
@@ -240,9 +582,12 @@
       adaptiveThreshold,
       adaptiveTemporal,
 
-      // Computational metrics
+      // Precise operation counters
+      clockEvaluations: engine.clockEvaluations ?? (mode === 'clock' ? (neuronCount * simulationSteps) : 0),
       neuronIntegrations: engine.neuronIntegrations,
       lazyDecayEvaluations: engine.lazyDecayEvaluations,
+      thresholdEvaluations: engine.thresholdEvaluations ?? engine.neuronIntegrations,
+      refractoryChecks: engine.refractoryChecks ?? (mode === 'clock' ? (neuronCount * simulationSteps) : engine.neuronIntegrations),
       externalInputEvents: engine.externalInputEvents,
       spikeCount: engine.totalSpikeCount,
       scheduledEvents: engine.scheduledEventCount,
@@ -257,16 +602,18 @@
       kernelDurationMs: Number(kernelDurationMs.toFixed(3)),
       avgStepDurationMs: Number(avgStepDurationMs.toFixed(4)),
 
-      // Scientific verification
+      // Scientific verification snapshots
       invariantValid,
       paritySignature,
       perNeuronSpikes,
+      spikeRaster: spikeRasterCopy,
+      membraneHistories,
       status: 'completed',
     };
   }
 
   /* ══════════════════════════════════════════════════════════════════════════
-   * 3. EXPERIMENT RUNNER CLASS
+   * 4. EXPERIMENT RUNNER CLASS
    * ══════════════════════════════════════════════════════════════════════════ */
 
   class ExperimentRunner {
@@ -289,8 +636,8 @@
     }
 
     /**
-     * Run an experiment campaign asynchronously.
-     * Yields control to the browser between trials so UI stays responsive.
+     * Run an experiment campaign asynchronously with balanced execution order and warmup isolation.
+     * Yields control to the browser between trials so UI stays completely fluid.
      * 
      * @param {object} campaignConfig
      * @param {object} [callbacks]
@@ -314,7 +661,7 @@
       this.currentExperimentId = experimentId;
 
       const {
-        campaignType = 'quick', // 'quick' | 'sparsity_sweep' | 'scale_sweep' | 'custom'
+        campaignType = 'quick', // 'quick' | 'sparsity_sweep' | 'scale_sweep' | 'factorial' | 'custom'
         neuronCount = 48,
         connectionDensity = 0.25,
         sparsity = 70,
@@ -324,11 +671,57 @@
         baseSeed = 42,
         adaptiveThreshold = false,
         adaptiveTemporal = false,
-        modes = ['event', 'clock'],
-        sweepValues = null, // for sweeps
+        sweepValues = null,
+        voltageTolerance = 1e-7,
       } = campaignConfig;
 
-      // 1. Build trial execution plan
+      // 1. Separate Unrecorded Warm-up Phase to avoid JIT compilation cold-start bias
+      const tWarmupStart = (typeof performance !== 'undefined') ? performance.now() : Date.now();
+      let warmupExecuted = false;
+      try {
+        const warmupSeed = (baseSeed + 99991) >>> 0;
+        executeTrial({
+          experimentId: `${experimentId}-WARMUP`,
+          trialId: `${experimentId}-WARMUP-CLOCK`,
+          repetitionIndex: 0,
+          seed: warmupSeed,
+          mode: 'clock',
+          neuronCount: Math.min(24, neuronCount),
+          connectionDensity,
+          sparsity,
+          firingThreshold,
+          simulationSteps: Math.min(25, simulationSteps),
+          adaptiveThreshold,
+          adaptiveTemporal,
+          executionOrder: 1,
+          pairOrder: 'clock-first',
+          isWarmup: true,
+        }, this.EngineConstructor);
+
+        executeTrial({
+          experimentId: `${experimentId}-WARMUP`,
+          trialId: `${experimentId}-WARMUP-EVENT`,
+          repetitionIndex: 0,
+          seed: warmupSeed,
+          mode: 'event',
+          neuronCount: Math.min(24, neuronCount),
+          connectionDensity,
+          sparsity,
+          firingThreshold,
+          simulationSteps: Math.min(25, simulationSteps),
+          adaptiveThreshold,
+          adaptiveTemporal,
+          executionOrder: 2,
+          pairOrder: 'clock-first',
+          isWarmup: true,
+        }, this.EngineConstructor);
+        warmupExecuted = true;
+      } catch (wErr) {
+        // Warmup non-fatal
+      }
+      const warmupDurationMs = Number((((typeof performance !== 'undefined') ? performance.now() : Date.now()) - tWarmupStart).toFixed(2));
+
+      // 2. Build trial execution plan with balanced alternating execution order
       const plan = [];
 
       if (campaignType === 'sparsity_sweep') {
@@ -336,7 +729,9 @@
         for (const sp of sparsities) {
           for (let r = 0; r < repetitions; r++) {
             const seed = deriveTrialSeed(baseSeed + sp * 13, r);
-            for (const mode of modes) {
+            const pairOrder = (r % 2 === 0) ? 'clock-first' : 'event-first';
+            const repModes = (r % 2 === 0) ? ['clock', 'event'] : ['event', 'clock'];
+            repModes.forEach((mode, mIdx) => {
               plan.push({
                 experimentId,
                 trialId: `${experimentId}-SP${sp}-R${r}-${mode.toUpperCase()}`,
@@ -350,8 +745,11 @@
                 simulationSteps,
                 adaptiveThreshold,
                 adaptiveTemporal,
+                executionOrder: mIdx + 1,
+                pairOrder,
+                isWarmup: false,
               });
-            }
+            });
           }
         }
       } else if (campaignType === 'scale_sweep') {
@@ -359,7 +757,9 @@
         for (const sz of sizes) {
           for (let r = 0; r < repetitions; r++) {
             const seed = deriveTrialSeed(baseSeed + sz * 17, r);
-            for (const mode of modes) {
+            const pairOrder = (r % 2 === 0) ? 'clock-first' : 'event-first';
+            const repModes = (r % 2 === 0) ? ['clock', 'event'] : ['event', 'clock'];
+            repModes.forEach((mode, mIdx) => {
               plan.push({
                 experimentId,
                 trialId: `${experimentId}-SZ${sz}-R${r}-${mode.toUpperCase()}`,
@@ -373,15 +773,52 @@
                 simulationSteps,
                 adaptiveThreshold,
                 adaptiveTemporal,
+                executionOrder: mIdx + 1,
+                pairOrder,
+                isWarmup: false,
+              });
+            });
+          }
+        }
+      } else if (campaignType === 'factorial' || campaignType === 'full_factorial') {
+        // Crossed Factorial Campaign: 4 network sizes x 4 sparsities x repetitions x 2 modes
+        const sizes = campaignConfig.factorialNeuronCounts || [24, 48, 72, 96];
+        const sparsities = campaignConfig.factorialSparsities || [50, 70, 90, 95];
+        for (const sz of sizes) {
+          for (const sp of sparsities) {
+            for (let r = 0; r < repetitions; r++) {
+              const seed = deriveTrialSeed(baseSeed + sz * 31 + sp * 13, r);
+              const pairOrder = (r % 2 === 0) ? 'clock-first' : 'event-first';
+              const repModes = (r % 2 === 0) ? ['clock', 'event'] : ['event', 'clock'];
+              repModes.forEach((mode, mIdx) => {
+                plan.push({
+                  experimentId,
+                  trialId: `${experimentId}-SZ${sz}-SP${sp}-R${r}-${mode.toUpperCase()}`,
+                  repetitionIndex: r,
+                  seed,
+                  mode,
+                  neuronCount: sz,
+                  connectionDensity,
+                  sparsity: sp,
+                  firingThreshold,
+                  simulationSteps,
+                  adaptiveThreshold,
+                  adaptiveTemporal,
+                  executionOrder: mIdx + 1,
+                  pairOrder,
+                  isWarmup: false,
+                });
               });
             }
           }
         }
       } else {
-        // Quick or Custom single-point campaign
+        // Quick or Custom single-point campaign with alternating execution order
         for (let r = 0; r < repetitions; r++) {
           const seed = deriveTrialSeed(baseSeed, r);
-          for (const mode of modes) {
+          const pairOrder = (r % 2 === 0) ? 'clock-first' : 'event-first';
+          const repModes = (r % 2 === 0) ? ['clock', 'event'] : ['event', 'clock'];
+          repModes.forEach((mode, mIdx) => {
             plan.push({
               experimentId,
               trialId: `${experimentId}-R${r}-${mode.toUpperCase()}`,
@@ -395,15 +832,18 @@
               simulationSteps,
               adaptiveThreshold,
               adaptiveTemporal,
+              executionOrder: mIdx + 1,
+              pairOrder,
+              isWarmup: false,
             });
-          }
+          });
         }
       }
 
       const totalTrials = plan.length;
       let completedTrials = 0;
 
-      // 2. Execute trials with asynchronous chunking
+      // 3. Execute trials with asynchronous chunking
       for (let i = 0; i < plan.length; i++) {
         if (this.isCancelled) {
           break;
@@ -441,7 +881,7 @@
             trialSeed: trialParams.seed,
             step: trialParams.simulationSteps,
             totalSteps: trialParams.simulationSteps,
-            statusText: `Running trial ${completedTrials}/${totalTrials} (${modeStr === 'event' ? 'Event-Driven' : 'Time-Stepped'} SNN, Seed ${trialParams.seed})...`,
+            statusText: `Running trial ${completedTrials}/${totalTrials} (${modeStr === 'event' ? 'Event-Driven' : 'Time-Stepped'} SNN, Seed ${trialParams.seed}, Order: ${trialParams.pairOrder})...`,
           });
         }
 
@@ -452,8 +892,15 @@
       this.isRunning = false;
       const finalStatus = this.isCancelled ? 'cancelled' : 'completed';
 
-      // 3. Compute statistical summaries across completed trials only
-      const results = this.aggregateResults(this.rawTrials, campaignConfig, experimentId, finalStatus);
+      // 4. Compute statistical summaries and differential parity analysis across completed trials
+      const results = this.aggregateResults(this.rawTrials, campaignConfig, experimentId, finalStatus, {
+        warmup: {
+          executed: warmupExecuted,
+          trialsCount: warmupExecuted ? 2 : 0,
+          durationMs: warmupDurationMs,
+        },
+        voltageTolerance,
+      });
 
       if (callbacks.onComplete) {
         callbacks.onComplete(results);
@@ -463,15 +910,19 @@
     }
 
     /**
-     * Compute comprehensive statistical summaries and paired comparisons.
+     * Compute comprehensive statistical summaries, paired difference comparisons with Student's t
+     * confidence intervals, and full differential parity verification.
+     * 
      * @param {object[]} rawTrials
      * @param {object} campaignConfig
      * @param {string} experimentId
      * @param {string} status
+     * @param {object} [meta]
      * @returns {object} Full results bundle
      */
-    aggregateResults(rawTrials, campaignConfig, experimentId, status) {
+    aggregateResults(rawTrials, campaignConfig, experimentId, status, meta = {}) {
       const completed = rawTrials.filter(t => t.status === 'completed');
+      const tolerance = meta.voltageTolerance ?? 1e-7;
 
       // 1. Group by configuration key: `${neuronCount}_${sparsity}`
       const configGroups = new Map();
@@ -496,6 +947,8 @@
       const pairedComparisons = [];
       let totalParityChecks = 0;
       let passedParityChecks = 0;
+      let maxObservedVoltageDelta = 0;
+      const differentialAudits = [];
 
       // 2. Compute summaries per group
       configGroups.forEach(group => {
@@ -503,24 +956,28 @@
 
         const metricsList = [
           { key: 'neuronIntegrations', label: 'Neuron Integrations', unit: 'integrations' },
+          { key: 'clockEvaluations', label: 'Clock Neuron Evaluations', unit: 'evaluations', modeFilter: 'clock' },
           { key: 'lazyDecayEvaluations', label: 'Lazy Decay Evaluations', unit: 'evaluations' },
+          { key: 'thresholdEvaluations', label: 'Threshold Evaluations', unit: 'evaluations' },
+          { key: 'refractoryChecks', label: 'Refractory Checks', unit: 'checks' },
           { key: 'deliveredEvents', label: 'Delivered Synaptic Events', unit: 'events' },
           { key: 'scheduledEvents', label: 'Scheduled Synaptic Events', unit: 'events' },
           { key: 'spikeCount', label: 'Total Spike Count', unit: 'spikes' },
           { key: 'queueOperations', label: 'Queue Operations (Push+Pop)', unit: 'ops' },
           { key: 'kernelDurationMs', label: 'Simulation Kernel Duration', unit: 'ms' },
+          { key: 'initDurationMs', label: 'Engine Init Duration', unit: 'ms' },
         ];
 
-        metricsList.forEach(({ key, label, unit }) => {
-          if (eventTrials.length > 0) {
-            const evVals = eventTrials.map(t => t[key]);
+        metricsList.forEach(({ key, label, unit, modeFilter }) => {
+          if (eventTrials.length > 0 && modeFilter !== 'clock') {
+            const evVals = eventTrials.map(t => t[key] ?? 0);
             const sEv = computeMetricStats(evVals, label, unit, 'event');
             sEv.neuronCount = neuronCount;
             sEv.sparsity = sparsity;
             summaries.push(sEv);
           }
           if (clockTrials.length > 0) {
-            const clVals = clockTrials.map(t => t[key]);
+            const clVals = clockTrials.map(t => t[key] ?? 0);
             const sCl = computeMetricStats(clVals, label, unit, 'clock');
             sCl.neuronCount = neuronCount;
             sCl.sparsity = sparsity;
@@ -528,57 +985,112 @@
           }
         });
 
-        // 3. Paired Differences (match by seed)
+        // 3. Paired Differences (match strictly by deterministic seed)
         const eventBySeed = new Map(eventTrials.map(t => [t.seed, t]));
-        const pairedDiffs = {
-          neuronIntegrations: [],
-          deliveredEvents: [],
-          spikeCount: [],
-          kernelDurationMs: [],
-          reductionPct: [],
-        };
+        const pairedClockTrials = [];
+        const pairedEventTrials = [];
 
         clockTrials.forEach(clTrial => {
           const evTrial = eventBySeed.get(clTrial.seed);
           if (evTrial) {
+            pairedClockTrials.push(clTrial);
+            pairedEventTrials.push(evTrial);
+
             totalParityChecks++;
-            // Check scientific parity: spike counts and delivered events must match on identical seeds
-            const parityMatch = (clTrial.spikeCount === evTrial.spikeCount) &&
-                                (clTrial.deliveredEvents === evTrial.deliveredEvents);
+
+            // Step-by-step differential parity check
+            let rasterMatch = (clTrial.spikeCount === evTrial.spikeCount);
+            let trajectoryMatch = true;
+            let pairMaxDelta = 0;
+
+            if (clTrial.spikeRaster && evTrial.spikeRaster) {
+              for (let nid = 0; nid < neuronCount; nid++) {
+                const cr = clTrial.spikeRaster[nid] || [];
+                const er = evTrial.spikeRaster[nid] || [];
+                if (cr.length !== er.length) {
+                  rasterMatch = false;
+                  break;
+                }
+                for (let s = 0; s < cr.length; s++) {
+                  if (cr[s] !== er[s]) {
+                    rasterMatch = false;
+                    break;
+                  }
+                }
+                if (!rasterMatch) break;
+              }
+            }
+
+            if (clTrial.membraneHistories && evTrial.membraneHistories) {
+              for (let nid = 0; nid < neuronCount; nid++) {
+                const ch = clTrial.membraneHistories[nid] || [];
+                const eh = evTrial.membraneHistories[nid] || [];
+                const len = Math.min(ch.length, eh.length);
+                for (let s = 0; s < len; s++) {
+                  const delta = Math.abs(ch[s] - eh[s]);
+                  if (delta > pairMaxDelta) pairMaxDelta = delta;
+                  if (delta > tolerance) {
+                    trajectoryMatch = false;
+                  }
+                }
+              }
+            }
+
+            if (pairMaxDelta > maxObservedVoltageDelta) {
+              maxObservedVoltageDelta = pairMaxDelta;
+            }
+
+            const eventsMatch = (clTrial.deliveredEvents === evTrial.deliveredEvents) &&
+                                (clTrial.scheduledEvents === evTrial.scheduledEvents);
+
+            const parityMatch = rasterMatch && trajectoryMatch && eventsMatch;
             if (parityMatch) passedParityChecks++;
 
-            const intDiff = clTrial.neuronIntegrations - evTrial.neuronIntegrations;
-            pairedDiffs.neuronIntegrations.push(intDiff);
-
-            const synDiff = clTrial.deliveredEvents - evTrial.deliveredEvents;
-            pairedDiffs.deliveredEvents.push(synDiff);
-
-            const spkDiff = clTrial.spikeCount - evTrial.spikeCount;
-            pairedDiffs.spikeCount.push(spkDiff);
-
-            const durDiff = clTrial.kernelDurationMs - evTrial.kernelDurationMs;
-            pairedDiffs.kernelDurationMs.push(durDiff);
-
-            const pctRed = clTrial.neuronIntegrations > 0
-              ? (intDiff / clTrial.neuronIntegrations) * 100
-              : 0;
-            pairedDiffs.reductionPct.push(pctRed);
+            differentialAudits.push({
+              seed: clTrial.seed,
+              neuronCount,
+              sparsity,
+              pairOrder: clTrial.pairOrder,
+              parityMatch,
+              rasterMatch,
+              trajectoryMatch,
+              eventsMatch,
+              pairMaxDelta,
+            });
           }
         });
 
-        if (pairedDiffs.reductionPct.length > 0) {
+        if (pairedClockTrials.length > 0) {
+          const clIntegrations = pairedClockTrials.map(t => t.neuronIntegrations);
+          const evIntegrations = pairedEventTrials.map(t => t.neuronIntegrations);
+          const clDelivered = pairedClockTrials.map(t => t.deliveredEvents);
+          const evDelivered = pairedEventTrials.map(t => t.deliveredEvents);
+          const clSpikes = pairedClockTrials.map(t => t.spikeCount);
+          const evSpikes = pairedEventTrials.map(t => t.spikeCount);
+          const clDuration = pairedClockTrials.map(t => t.kernelDurationMs);
+          const evDuration = pairedEventTrials.map(t => t.kernelDurationMs);
+
+          const diffIntegrations = pairedDifferences(clIntegrations, evIntegrations);
+          const redIntegrations = pairedPercentageReductions(clIntegrations, evIntegrations);
+          const diffDelivered = pairedDifferences(clDelivered, evDelivered);
+          const diffSpikes = pairedDifferences(clSpikes, evSpikes);
+          const diffDuration = pairedDifferences(clDuration, evDuration);
+
           pairedComparisons.push({
             neuronCount,
             sparsity,
-            nPaired: pairedDiffs.reductionPct.length,
-            meanIntegrationsReductionPct: mean(pairedDiffs.reductionPct),
-            sdIntegrationsReductionPct: sampleStdDev(pairedDiffs.reductionPct),
-            meanIntegrationDiff: mean(pairedDiffs.neuronIntegrations),
-            sdIntegrationDiff: sampleStdDev(pairedDiffs.neuronIntegrations),
-            meanDeliveredDiff: mean(pairedDiffs.deliveredEvents),
-            meanSpikeDiff: mean(pairedDiffs.spikeCount),
-            meanDurationDiffMs: mean(pairedDiffs.kernelDurationMs),
-            sdDurationDiffMs: sampleStdDev(pairedDiffs.kernelDurationMs),
+            nPaired: pairedClockTrials.length,
+            meanIntegrationsReductionPct: redIntegrations.mean,
+            sdIntegrationsReductionPct: redIntegrations.sd,
+            ciIntegrationsReductionPct: redIntegrations.confidenceInterval95,
+            meanIntegrationDiff: diffIntegrations.mean,
+            sdIntegrationDiff: diffIntegrations.sd,
+            ciIntegrationDiff: diffIntegrations.confidenceInterval95,
+            meanDeliveredDiff: diffDelivered.mean,
+            meanSpikeDiff: diffSpikes.mean,
+            meanDurationDiffMs: diffDuration.mean,
+            sdDurationDiffMs: diffDuration.sd,
+            ciDurationDiffMs: diffDuration.confidenceInterval95,
           });
         }
       });
@@ -589,7 +1101,13 @@
         experimentId,
         createdAt: new Date().toISOString(),
         status,
+        algorithmVersion: 'v2.2.1-validated',
+        simEngineVersion: '2.2.1-validated',
+        experimentRunnerVersion: '2.2.1',
         campaignConfig,
+        warmup: meta.warmup || { executed: false, trialsCount: 0, durationMs: 0 },
+        warmupExecuted: meta.warmup ? meta.warmup.executed : false,
+        warmupDurationMs: meta.warmup ? meta.warmup.durationMs : 0,
         totalTrialsPlanned: rawTrials.length,
         completedTrialsCount: completed.length,
         cancelledTrialsCount: rawTrials.length - completed.length,
@@ -597,19 +1115,21 @@
           totalPairedChecked: totalParityChecks,
           passedCount: passedParityChecks,
           parityMatchRate: Number((parityRate * 100).toFixed(1)),
-          allMatched: passedParityChecks === totalParityChecks,
+          allMatched: passedParityChecks === totalParityChecks && totalParityChecks > 0,
+          maxObservedVoltageDelta,
+          tolerance,
+          voltageTolerance: tolerance,
+          differentialAudits,
         },
         summaries,
         pairedComparisons,
         rawTrials,
-        simEngineVersion: '2.1.1-sparse',
-        experimentRunnerVersion: '2.2.0',
       };
     }
   }
 
   /* ══════════════════════════════════════════════════════════════════════════
-   * 4. EXPORT UTILITIES (CSV & JSON)
+   * 5. STRUCTURED REPRODUCIBLE DATA EXPORTERS (CSV & JSON)
    * ══════════════════════════════════════════════════════════════════════════ */
 
   function _escCSV(val) {
@@ -631,18 +1151,24 @@
     const headers = [
       'Experiment ID',
       'Trial ID',
-      'Repetition',
+      'Repetition Index',
       'Seed',
       'Execution Mode',
+      'Execution Order In Pair',
+      'Pair Mode Order',
+      'Is Warmup Run',
       'Neuron Count',
-      'Connection Density',
+      'Synaptic Density',
       'Input Sparsity (%)',
       'Firing Threshold',
       'Simulation Steps',
       'Adaptive Threshold',
       'Adaptive Temporal',
+      'Clock Neuron Evaluations',
       'Neuron Integrations',
       'Lazy Decay Evaluations',
+      'Threshold Evaluations',
+      'Refractory Checks',
       'External Input Events',
       'Spike Count',
       'Scheduled Synapses',
@@ -666,6 +1192,9 @@
         t.repetitionIndex !== undefined ? t.repetitionIndex + 1 : '',
         t.seed,
         t.mode === 'event' ? 'Event-Driven SNN' : 'Time-Stepped SNN',
+        t.executionOrder ?? 1,
+        _escCSV(t.pairOrder ?? 'clock-first'),
+        t.isWarmup ? 'TRUE' : 'FALSE',
         t.neuronCount,
         t.connectionDensity,
         t.sparsity,
@@ -673,8 +1202,11 @@
         t.simulationSteps,
         t.adaptiveThreshold ? 'TRUE' : 'FALSE',
         t.adaptiveTemporal ? 'TRUE' : 'FALSE',
+        t.clockEvaluations ?? '',
         t.neuronIntegrations ?? '',
         t.lazyDecayEvaluations ?? '',
+        t.thresholdEvaluations ?? '',
+        t.refractoryChecks ?? '',
         t.externalInputEvents ?? '',
         t.spikeCount ?? '',
         t.scheduledEvents ?? '',
@@ -695,7 +1227,7 @@
   }
 
   /**
-   * Export statistical summary data to CSV format.
+   * Export statistical summary data to CSV format with 95% Confidence Intervals.
    * @param {object} experimentResult
    * @returns {string} CSV string
    */
@@ -709,6 +1241,9 @@
       'N (Completed Runs)',
       'Mean',
       'Sample SD (n-1)',
+      '95% CI Lower',
+      '95% CI Upper',
+      'Margin of Error',
       'Median',
       'Min',
       'Max',
@@ -718,6 +1253,7 @@
 
     let csv = headers.join(',') + '\n';
     for (const s of summaries) {
+      const ci = s.confidenceInterval95;
       const row = [
         _escCSV(s.metric),
         s.mode === 'event' ? 'Event-Driven SNN' : 'Time-Stepped SNN',
@@ -726,6 +1262,9 @@
         s.n,
         s.mean !== undefined ? s.mean.toFixed(2) : '',
         s.sd !== null && s.sd !== undefined ? s.sd.toFixed(2) : 'N/A',
+        ci ? ci.lower.toFixed(2) : 'N/A',
+        ci ? ci.upper.toFixed(2) : 'N/A',
+        ci ? ci.marginOfError.toFixed(2) : 'N/A',
         s.median !== undefined ? s.median.toFixed(2) : '',
         s.min !== undefined ? s.min.toFixed(2) : '',
         s.max !== undefined ? s.max.toFixed(2) : '',
@@ -738,12 +1277,11 @@
   }
 
   /**
-   * Export clean, portable JSON representation without Proxies.
+   * Export clean, portable JSON representation without Proxies or non-serializable objects.
    * @param {object} experimentResult
    * @returns {string} JSON string
    */
   function generateExperimentJSON(experimentResult) {
-    // Sanitize any non-plain objects
     const cleanObject = JSON.parse(JSON.stringify(experimentResult, (key, value) => {
       if (typeof value === 'bigint') return value.toString();
       return value;
@@ -752,7 +1290,7 @@
   }
 
   /* ══════════════════════════════════════════════════════════════════════════
-   * 5. PUBLIC MODULE API
+   * 6. PUBLIC MODULE API
    * ══════════════════════════════════════════════════════════════════════════ */
 
   return {
@@ -761,6 +1299,11 @@
     median,
     min,
     max,
+    tCritical95,
+    confidenceInterval95,
+    pairedDifferences,
+    pairedPercentageReductions,
+    verifyDifferentialParity,
     deriveTrialSeed,
     computeMetricStats,
     executeTrial,

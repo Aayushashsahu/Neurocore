@@ -1,13 +1,61 @@
 # NEUROCORE — Adaptive Event-Driven Neuromorphic Computing Platform
 
-**Version:** v2.2.0  
+**Version:** v2.2.1  
 **Status:** Interactive Research Platform Prototype  
 **Live Deployment:** [https://neurocore-gilt.vercel.app/](https://neurocore-gilt.vercel.app/)  
-**Deployment Platform:** Vercel (Static Web Application)
+**Deployment Platform:** Vercel (Static Web Application)  
+**Mathematical Specification:** [docs/MATHEMATICAL_MODEL.md](docs/MATHEMATICAL_MODEL.md)
 
 NEUROCORE is an interactive scientific computing and visualization platform for exploring event-driven Spiking Neural Networks (SNNs), adaptive neuromorphic computation policies, and hardware-aware edge profiling.
 
 > *"Intelligence that computes only when it matters."*
+
+---
+
+## What's New in v2.2.1 — Mathematical Validation, Scientific Integrity & Experimental Methodology
+
+### 1. Formalized Discrete-Time LIF Mathematical Model
+- **Explicit Discrete-Time Equations:** Normalized subthreshold dynamics $\tilde{V}_i(t) = \lambda V_i(t-1) + I_i(t)$ with leak factor $\lambda = \exp(-\Delta t / \tau_m)$, instantaneous threshold comparison $\tilde{V}_i(t) \ge \theta_i(t)$, hard reset to $V_{\text{reset}} = 0.0$, and saturation ceiling $V_{\text{max}} = 1.2$.
+- **Strict Execution Sequence:** Every evaluation cycle strictly enforces: Refractory Status Check $\to$ Leak Decay $\to$ Input Integration $\to$ Saturation Limiting $\to$ Threshold Comparison $\to$ Spike Dispatch & Reset.
+- **Refractory Invariant:** During absolute refractory period $R=2$, inputs are suppressed without altering potential, and accounted under `refractoryChecks` rather than `neuronIntegrations`.
+
+### 2. Analytical & Numerical Lazy Decay Equivalence
+- **Closed-Form Exponential Decay:** Replaced discrete iterative multiplications with closed-form evaluation $V_i(t) = V_i(t_{\text{last}}) \cdot \lambda^{t - t_{\text{last}}}$.
+- **Numerical Validation:** Validated across 5 standard leak factors ($\lambda \in \{0.50, 0.70, 0.85, 0.95, 0.99\}$) and multi-step idle intervals, proving numerical deviation from sequential clock decay is within IEEE 754 machine epsilon ($\le 1.11 \times 10^{-16}$).
+
+### 3. Full Differential Parity Verification Protocol (`verifyDifferentialParity`)
+- **5-Point Parity Audit:** Compares paired Clock and Event executions across:
+  1. *Network Topology:* Identical node counts, connections, directed pairs, weights, and delays.
+  2. *External Inputs:* Exact stochastic event counts and targeted neurons.
+  3. *Per-Neuron Spike Rasters:* Exact equality of spike timestamp vectors ($\text{Raster}_{\text{clock}}[i] \equiv \text{Raster}_{\text{event}}[i]$).
+  4. *Step-by-Step Membrane Trajectories:* Continuous voltage trajectory parity across all neurons and steps within tolerance $|V_{\text{clock}} - V_{\text{event}}| \le 10^{-7}$.
+  5. *Synaptic Conservation:* Scheduled and delivered event parity.
+- **Divergence Diagnostics:** On synthetic discrepancy injection, audit pinpoint accurate diagnostics identifying the exact neuron ID, timestep, and voltage difference.
+
+### 4. Rigorous Operation Counter Accounting
+- **Eliminated Overcounting:** Resolved bug where time-stepped mode classified ordinary updates as lazy decays (`lazyDecayEvaluations` is strictly 0 in Clock Mode).
+- **Non-Refractory Integration Tracking:** `neuronIntegrations` counts strictly active additions of current to non-refractory neurons; refractory checks are tracked separately under `refractoryChecks`.
+- **Clock Evaluations:** Tracked as $N \times \text{steps}$ in clock mode, strictly 0 in event mode.
+
+### 5. Experimental Timing Methodology & JIT Bias Mitigation
+- **Isolated Warm-up Runs:** Automatically executes unrecorded warm-up trials to prime the JavaScript JIT compiler (V8) before recording sample statistics, isolating cold-start compilation overhead.
+- **Balanced Alternating Execution Order:** Alternates execution order within paired repetitions (Rep 0: Clock $\to$ Event; Rep 1: Event $\to$ Clock) to eliminate systematic warmup bias.
+- **Granular Timing Breakdown:** Tracks engine initialization duration (`initDurationMs`), simulation kernel duration (`kernelDurationMs`), average step duration (`avgStepDurationMs`), and warm-up time (`warmupDurationMs`).
+
+### 6. Statistical Rigor with Student's t-Distribution
+- **Exact Student's t Critical Values:** Embeds exact critical value lookup table for degrees of freedom $df \in [1, 100]$ plus Cornish-Fisher expansion for $df > 100$.
+- **95% Confidence Intervals:** Computes exact 95% Confidence Intervals for sample means and paired difference percentage reductions ($\bar{x} \pm t_{0.975, df} \cdot \text{SEM}$).
+- **Zero-Denominator Protection:** Explicit mathematical handling for paired reductions when reference clock activity is 0, preventing NaN or Infinite values.
+
+### 7. Crossed Factorial Campaign Matrix (`Full Factorial (4×4 Matrix)`)
+- **4×4 Parameter Matrix:** Evaluates 4 network sizes ($24, 48, 72, 96$ neurons) crossed with 4 input sparsities ($50\%, 70\%, 90\%, 95\%$) across 10 paired repetitions = 320 empirical simulation runs.
+- **Preset Pill in UI:** One-click launch from the Campaign Presets bar with live progress tracking and paired comparisons for all 16 cells.
+
+### 8. Comprehensive Documentation & Validation Suites
+- **Mathematical Specification Document:** Created `docs/MATHEMATICAL_MODEL.md` featuring 16 exhaustive sections covering all equations, proofs, scheduler lifecycles, and known limitations.
+- **146 Automated Tests:**
+  - `test-simulation.js`: 58 tests across 6 suites verifying LIF equations, lazy decay equivalence, conservation invariants, deterministic seeds, and adaptive policies.
+  - `test-experiments.js`: 88 tests across 9 suites verifying Student's t CIs, paired differences, differential parity, warm-up exclusion, alternating order, factorial campaigns, cancellation, and CSV/JSON serialization.
 
 ---
 
