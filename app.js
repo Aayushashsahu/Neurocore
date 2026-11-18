@@ -133,6 +133,7 @@
   let membraneChart = null;
   let rasterChart = null;
   let activityChart = null;
+  let activityMap = null;
   let selectedNeuronId = 0;
 
   // Simulation loop control
@@ -185,6 +186,10 @@
       if (aCanvas && !activityChart) {
         activityChart = new window.NeuroCharts.SpikeActivityChart(aCanvas, { windowSize: 45 });
       }
+      const mapCanvas = $('#neuralActivityMapCanvas');
+      if (mapCanvas && !activityMap && window.NeuroCharts.NeuralActivityMap) {
+        activityMap = new window.NeuroCharts.NeuralActivityMap(mapCanvas);
+      }
     }
 
     populateNeuronSelector();
@@ -214,16 +219,18 @@
   });
 
   function updateSimModeBadge() {
+    const modeStr = simConfig.mode === 'event' ? 'EVENT-DRIVEN SNN' : 'TIME-STEPPED SNN';
     const badge = $('#simModeBadge');
-    if (badge) {
-      badge.textContent = `MODE: ${simConfig.mode === 'event' ? 'EVENT-DRIVEN' : 'TIME-STEPPED'}`;
-    }
+    if (badge) badge.textContent = `MODE: ${modeStr}`;
+    const topbarTag = $('#topbarModeTag');
+    if (topbarTag) topbarTag.textContent = modeStr;
   }
 
   function resizeSimCharts() {
     membraneChart?.resize();
     rasterChart?.resize();
     activityChart?.resize();
+    activityMap?.resize();
   }
 
   function syncControlOutputs() {
@@ -315,25 +322,55 @@
         currentStep: state.step,
       });
       const recentRate = state.spikeFrequency.length > 0 ? state.spikeFrequency[state.spikeFrequency.length - 1] : 0;
-      $('#activityRate').textContent = `${recentRate} SPIKES/STEP`;
+      $('#activityRate').textContent = `${recentRate} HZ`;
+      const actRateTag = $('#activityRateTag');
+      if (actRateTag) actRateTag.textContent = `${recentRate} SPIKES/STEP`;
     }
 
-    // 5. Update KPI Cards
+    // 5. Update 2D Neural Activity Map
+    if (activityMap) {
+      activityMap.update({
+        potentials: state.potentials,
+        spiked: state.spiked,
+        active: state.active,
+        neuronCount: simConfig.neuronCount,
+      });
+    }
+
+    // 6. Update KPI Cards & Workstation Telemetry
     const totalOps = simConfig.neuronCount * Math.max(1, state.step);
     const densityPct = totalOps > 0 ? (state.updateCount / totalOps) * 100 : 0;
+    const recentSpikeRate = state.spikeFrequency.length > 0 ? state.spikeFrequency[state.spikeFrequency.length - 1] : 0;
+
     $('#spikesMetric').textContent = state.spikeCount.toLocaleString();
     $('#updatesMetric').textContent = state.updateCount.toLocaleString();
     $('#activeMetric').textContent = state.activeCount.toLocaleString();
+    const inactEl = $('#inactiveMetric');
+    if (inactEl) inactEl.textContent = state.inactiveCount.toLocaleString();
     $('#densityMetric').textContent = `${densityPct.toFixed(1)}%`;
+    const simTimeEl = $('#metricSimTime');
+    if (simTimeEl) simTimeEl.textContent = `T+${String(state.step).padStart(2, '0')} ms`;
 
-    // 6. Update Frame and Status
+    // Right column activity distribution & metrics
+    const fireRateEl = $('#firingRateMetric');
+    if (fireRateEl) fireRateEl.textContent = `${recentSpikeRate} spikes/step`;
+    const activePct = Math.min(100, Math.round((state.activeCount / Math.max(1, simConfig.neuronCount)) * 100));
+    const distFill = $('#activityDistFill');
+    if (distFill) distFill.style.width = `${activePct}%`;
+    const synEventsEl = $('#synapticEventsMetric');
+    if (synEventsEl) synEventsEl.textContent = `${(state.spikeCount * 4).toLocaleString()} ops`;
+    const queueSizeEl = $('#queueSizeMetric');
+    const queueLen = simEngine.eventQueue ? (simEngine.eventQueue.size ?? simEngine.eventQueue._heap?.length ?? (simEngine.eventQueue.events ? simEngine.eventQueue.events.length : 0)) : 0;
+    if (queueSizeEl) queueSizeEl.textContent = `${queueLen} PENDING`;
+
+    // 7. Update Frame and Status
     $('#networkFrame').textContent = `STEP ${String(state.step).padStart(2, '0')}`;
     $('#networkStatus').textContent = `${state.spiked.length} spikes in step ${state.step}`;
 
-    // 7. Update Event Queue Visualization
+    // 8. Update Event Queue Visualization
     updateEventQueueUI();
 
-    // 8. Log Events for Salient Timesteps
+    // 9. Log Events for Salient Timesteps
     if (state.step === 1 || state.spiked.length > 0 || state.step === targetTotalSteps) {
       const label = state.step === 1 ? 'START' : state.spiked.length > 0 ? 'SPIKE' : 'STEP';
       const msg = state.spiked.length > 0
@@ -366,7 +403,7 @@
     const badge = $('#queueLengthTag');
     if (!tbody || !simEngine) return;
 
-    const rawQueue = simEngine.eventQueue ? (simEngine.eventQueue.events || []) : [];
+    const rawQueue = simEngine.eventQueue ? (simEngine.eventQueue.events || simEngine.eventQueue._heap || []) : [];
     badge.textContent = `${rawQueue.length} EVENTS IN QUEUE`;
 
     if (rawQueue.length === 0) {
@@ -465,14 +502,25 @@
 
     $('#networkStatus').textContent = 'Awaiting execution';
     $('#networkFrame').textContent = 'STEP 00';
-    ['#spikesMetric', '#updatesMetric', '#activeMetric', '#densityMetric'].forEach(sel => {
+    ['#spikesMetric', '#updatesMetric', '#activeMetric', '#inactiveMetric', '#densityMetric'].forEach(sel => {
       const el = $(sel);
       if (el) el.textContent = '—';
     });
+    const simTimeEl = $('#metricSimTime');
+    if (simTimeEl) simTimeEl.textContent = 'T+00 ms';
+    const fireRateEl = $('#firingRateMetric');
+    if (fireRateEl) fireRateEl.textContent = '0 spikes/step';
+    const distFill = $('#activityDistFill');
+    if (distFill) distFill.style.width = '0%';
+    const synEventsEl = $('#synapticEventsMetric');
+    if (synEventsEl) synEventsEl.textContent = '—';
+    const queueSizeEl = $('#queueSizeMetric');
+    if (queueSizeEl) queueSizeEl.textContent = '0 PENDING';
 
     membraneChart?.clear();
     rasterChart?.clear();
     activityChart?.clear();
+    activityMap?.clear();
 
     const tbody = $('#eventQueueBody');
     if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="empty-table">No pending synaptic events. Run or step simulation to observe queue activity.</td></tr>';
@@ -592,6 +640,91 @@
     initSimulation();
     $('#clearSimulation')?.click();
     toast('Settings reset to defaults.');
+  });
+
+  // 3D HUD Control Actions
+  $('#toggleRotateBtn')?.addEventListener('click', () => {
+    if (window.NeuroViz && typeof window.NeuroViz.toggleAutoRotate === 'function') {
+      const isRotating = window.NeuroViz.toggleAutoRotate();
+      $('#toggleRotateBtn').textContent = isRotating ? '↺ Rotating' : '↺ Rotate';
+      toast(`Auto-rotation ${isRotating ? 'enabled' : 'paused'}.`);
+    }
+  });
+
+  $('#zoomInBtn')?.addEventListener('click', () => {
+    if (window.NeuroViz && typeof window.NeuroViz.zoom3D === 'function') {
+      window.NeuroViz.zoom3D(0.85);
+    }
+  });
+
+  $('#zoomOutBtn')?.addEventListener('click', () => {
+    if (window.NeuroViz && typeof window.NeuroViz.zoom3D === 'function') {
+      window.NeuroViz.zoom3D(1.15);
+    }
+  });
+
+  $('#toggle3DPauseBtn')?.addEventListener('click', () => {
+    if (window.NeuroViz && typeof window.NeuroViz.togglePause3D === 'function') {
+      const isPaused = window.NeuroViz.togglePause3D();
+      $('#toggle3DPauseBtn').textContent = isPaused ? '▶ Resume 3D' : '⏸ Pause 3D';
+      toast(`3D visualizer ${isPaused ? 'paused' : 'resumed'}.`);
+    }
+  });
+
+  // Workload Preset Selector
+  $('#simWorkloadPreset')?.addEventListener('change', e => {
+    if (isSimRunning) pauseSimulation();
+    const preset = e.target.value;
+    if (preset === 'poisson') {
+      simConfig.neuronCount = 72;
+      simConfig.sparsity = 25;
+      simConfig.threshold = 0.50;
+      simConfig.steps = 50;
+      simConfig.mode = 'event';
+      simConfig.adaptiveThreshold = true;
+      simConfig.adaptiveTemporal = true;
+      $('#neuronCount').value = 72;
+      $('#inputSparsity').value = 25;
+      $('#firingThreshold').value = 50;
+      $('#simulationSteps').value = 50;
+      $('#adaptiveThreshold').checked = true;
+      $('#adaptiveTemporal').checked = true;
+    } else if (preset === 'isolated') {
+      simConfig.neuronCount = 36;
+      simConfig.sparsity = 90;
+      simConfig.threshold = 0.80;
+      simConfig.steps = 30;
+      simConfig.mode = 'clock';
+      simConfig.adaptiveThreshold = false;
+      simConfig.adaptiveTemporal = false;
+      $('#neuronCount').value = 36;
+      $('#inputSparsity').value = 90;
+      $('#firingThreshold').value = 80;
+      $('#simulationSteps').value = 30;
+      $('#adaptiveThreshold').checked = false;
+      $('#adaptiveTemporal').checked = false;
+    } else {
+      // default
+      simConfig.neuronCount = 48;
+      simConfig.sparsity = 70;
+      simConfig.threshold = 0.65;
+      simConfig.steps = 40;
+      simConfig.mode = 'event';
+      simConfig.adaptiveThreshold = false;
+      simConfig.adaptiveTemporal = false;
+      $('#neuronCount').value = 48;
+      $('#inputSparsity').value = 70;
+      $('#firingThreshold').value = 65;
+      $('#simulationSteps').value = 40;
+      $('#adaptiveThreshold').checked = false;
+      $('#adaptiveTemporal').checked = false;
+    }
+    $$('#executionMode button').forEach(b => b.classList.toggle('selected', b.dataset.mode === simConfig.mode));
+    syncControlOutputs();
+    updateSimModeBadge();
+    initSimulation();
+    $('#clearSimulation')?.click();
+    toast(`Loaded preset: ${preset.toUpperCase()}`);
   });
 
   // ─────────────────────────────────────────────────────────────────────────

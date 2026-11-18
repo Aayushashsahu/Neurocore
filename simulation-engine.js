@@ -149,6 +149,11 @@ class EventQueue {
     return this._heap.length;
   }
 
+  /** @returns {Array<{time: number, sourceId: number, targetId: number, weight: number}>} */
+  get events() {
+    return this._heap;
+  }
+
   /**
    * Insert an event into the queue.
    * @param {{time: number, sourceId: number, targetId: number, weight: number}} event

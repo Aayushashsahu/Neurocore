@@ -851,12 +851,180 @@
       : s;
   }
 
+  // ════════════════════════════════════════════════════════════
+  //  E.  NeuralActivityMap (2D Spatial Network & Heatmap)
+  // ════════════════════════════════════════════════════════════
+
+  class NeuralActivityMap {
+    #canvas;
+    #ctx;
+    #w = 0;
+    #h = 0;
+    #nodes = [];
+    #edges = [];
+    #neuronCount = 48;
+    #spiked = [];
+    #active = [];
+    #potentials = [];
+
+    /**
+     * @param {HTMLCanvasElement} canvasElement
+     */
+    constructor(canvasElement) {
+      this.#canvas = canvasElement;
+      this.resize();
+    }
+
+    resize() {
+      const { ctx, w, h } = prepCanvas(this.#canvas);
+      this.#ctx = ctx;
+      this.#w = w;
+      this.#h = h;
+      this.#generateLayout();
+      this.draw();
+    }
+
+    setNeuronCount(count, connections = null) {
+      this.#neuronCount = count || 48;
+      this.#edges = connections || [];
+      this.#generateLayout();
+      this.draw();
+    }
+
+    #generateLayout() {
+      const w = this.#w || 280;
+      const h = this.#h || 240;
+      const count = this.#neuronCount;
+      const cols = Math.ceil(Math.sqrt(count * 1.4));
+      const rows = Math.ceil(count / cols);
+      const padX = 26;
+      const padY = 24;
+      const usableW = Math.max(100, w - padX * 2);
+      const usableH = Math.max(80, h - padY * 2);
+
+      this.#nodes = [];
+      for (let i = 0; i < count; i++) {
+        const row = Math.floor(i / cols);
+        const col = i % cols;
+        const jitterX = Math.sin(i * 9.2) * 5;
+        const jitterY = Math.cos(i * 6.7) * 5;
+        const x = padX + (cols === 1 ? 0.5 : col / (cols - 1)) * usableW + jitterX;
+        const y = padY + (rows === 1 ? 0.5 : row / (rows - 1)) * usableH + jitterY;
+        this.#nodes.push({ id: i, x, y, r: 3.5 });
+      }
+
+      // Generate clean nearest-neighbor edges if not provided
+      if (this.#edges.length === 0) {
+        this.#edges = [];
+        this.#nodes.forEach(nA => {
+          this.#nodes
+            .filter(nB => nB.id < nA.id && Math.hypot(nB.x - nA.x, nB.y - nA.y) < Math.min(w, h) * 0.42)
+            .sort((a, b) => Math.hypot(a.x - nA.x, a.y - nA.y) - Math.hypot(b.x - nA.x, b.y - nA.y))
+            .slice(0, 2)
+            .forEach(nB => this.#edges.push({ from: nB.id, to: nA.id }));
+        });
+      }
+    }
+
+    clear() {
+      this.#spiked = [];
+      this.#active = [];
+      this.#potentials = [];
+      this.draw();
+    }
+
+    update(data) {
+      this.#spiked = data.spiked || [];
+      this.#active = data.active || [];
+      this.#potentials = data.potentials || [];
+      if (data.neuronCount && data.neuronCount !== this.#neuronCount) {
+        this.setNeuronCount(data.neuronCount, data.connections);
+      } else {
+        this.draw();
+      }
+    }
+
+    draw() {
+      const ctx = this.#ctx;
+      if (!ctx || !this.#w || !this.#h) return;
+      clearCanvas(ctx, this.#w, this.#h);
+
+      const spikedSet = new Set(this.#spiked);
+      const activeSet = new Set(this.#active);
+
+      // 1. Draw synaptic lines
+      ctx.lineWidth = 0.8;
+      for (const edge of this.#edges) {
+        const nA = this.#nodes[edge.from];
+        const nB = this.#nodes[edge.to];
+        if (!nA || !nB) continue;
+
+        const isSpiking = spikedSet.has(edge.from) || spikedSet.has(edge.to);
+        const isActive = activeSet.has(edge.from) && activeSet.has(edge.to);
+
+        ctx.strokeStyle = isSpiking
+          ? 'rgba(0, 217, 255, 0.75)'
+          : (isActive ? 'rgba(0, 224, 184, 0.35)' : 'rgba(25, 45, 68, 0.28)');
+        ctx.beginPath();
+        ctx.moveTo(nA.x, nA.y);
+        ctx.lineTo(nB.x, nB.y);
+        ctx.stroke();
+      }
+
+      // 2. Draw neuron nodes
+      for (const node of this.#nodes) {
+        const isSpike = spikedSet.has(node.id);
+        const isActive = activeSet.has(node.id);
+        const v = this.#potentials[node.id] || 0;
+
+        if (isSpike) {
+          // Expanding spike ring
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, node.r * 2.8, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(0, 217, 255, 0.25)';
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, node.r * 1.5, 0, Math.PI * 2);
+          ctx.fillStyle = '#00D9FF';
+          ctx.fill();
+        } else if (isActive || v > 0.2) {
+          const intensity = Math.min(1, v);
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, node.r * 1.2, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(0, 224, 184, ${0.4 + intensity * 0.5})`;
+          ctx.fill();
+          ctx.strokeStyle = '#00D9FF';
+          ctx.lineWidth = 0.8;
+          ctx.stroke();
+        } else {
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, node.r, 0, Math.PI * 2);
+          ctx.fillStyle = '#1D3045';
+          ctx.fill();
+          ctx.strokeStyle = '#2A4560';
+          ctx.lineWidth = 0.5;
+          ctx.stroke();
+        }
+      }
+
+      // 3. Technical Micro-Overlay (Top corners)
+      ctx.fillStyle = 'rgba(129, 149, 169, 0.6)';
+      ctx.font = '8px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(`2D TOPOLOGY · N=${this.#nodes.length}`, 8, 12);
+      ctx.textAlign = 'right';
+      ctx.fillText(`${spikedSet.size} SPIKING`, this.#w - 8, 12);
+    }
+  }
+
   // ───────────────── Public API ──────────────────
 
   window.NeuroCharts = Object.freeze({
     MembranePotentialChart,
     RasterPlotChart,
     SpikeActivityChart,
+    NeuralActivityMap,
     Benchmark,
   });
 })();

@@ -105,26 +105,6 @@
               </div>
             </div>
 
-            <!-- CSS Fallback when WebGL is unavailable -->
-            <div class="hero-visual" aria-hidden="true">
-              <div class="orbit orbit-one"></div>
-              <div class="orbit orbit-two"></div>
-              <div class="orbit orbit-three"></div>
-              <div class="core-node"><span class="core-ring"></span><span class="core-center">N</span></div>
-              <span class="orbit-node node-a"></span>
-              <span class="orbit-node node-b"></span>
-              <span class="orbit-node node-c"></span>
-              <span class="orbit-node node-d"></span>
-              <span class="orbit-node node-e"></span>
-              <span class="orbit-node node-f"></span>
-              <div class="signal-line line-a"></div>
-              <div class="signal-line line-b"></div>
-              <div class="signal-line line-c"></div>
-              <div class="visual-label label-a">SPIKE EVENT <b>→</b></div>
-              <div class="visual-label label-b">ADAPTIVE THRESHOLD <b>↗</b></div>
-              <div class="visual-label label-c">EDGE INFERENCE <b>●</b></div>
-            </div>
-
             <div class="hero-foot">
               <span><b>01</b> / EVENT-DRIVEN RUNTIME</span>
               <span><b>02</b> / ADAPTIVE POLICIES</span>
@@ -252,274 +232,362 @@
         <!-- ════════════════════════════════════════════════════════════════
              PAGE 2: SIMULATION LAB (FIXED & HIGH PRIORITY)
              ════════════════════════════════════════════════════════════════ -->
+        <!-- ════════════════════════════════════════════════════════════════
+             PAGE 2: SIMULATION LAB (SCIENTIFIC RESEARCH WORKSTATION)
+             ════════════════════════════════════════════════════════════════ -->
         <section class="page" id="page-simulator">
-          <div class="page-heading compact-heading">
-            <div>
-              <div class="eyebrow"><span class="eyebrow-line"></span> INTERACTIVE ENVIRONMENT / 01</div>
-              <h1>Simulation <span>lab.</span></h1>
-              <p class="page-subtitle">Configure an interconnected Leaky Integrate-and-Fire network and observe real-time membrane potential, spike propagation and event queue scheduling.</p>
+          <!-- WORKSTATION TOP NAVIGATION BAR -->
+          <div class="sim-workstation-topbar">
+            <div class="sw-left">
+              <span class="sw-brand-pill"><span class="sw-dot-live"></span> NEUROCORE // WORKSTATION</span>
+              <div class="sw-title-block">
+                <h2>Simulation <span>lab.</span></h2>
+                <span class="sw-subtitle">Cinematic 3D SNN Visualization &amp; LIF Neural Dynamics</span>
+              </div>
             </div>
-            <span class="simulation-badge"><span class="pulse-dot"></span> SNN RUNTIME ACTIVE</span>
+            <div class="sw-center">
+              <div class="sw-exp-selector">
+                <span class="sw-label">WORKLOAD PRESET:</span>
+                <select id="simWorkloadPreset" class="sw-select" aria-label="Select Workload Preset">
+                  <option value="default">01 // Adaptive Sparse Sensory Stream</option>
+                  <option value="poisson">02 // High-Frequency Poisson Burst</option>
+                  <option value="isolated">03 // Ultra-Sparse Temporal Transients</option>
+                </select>
+              </div>
+            </div>
+            <div class="sw-right">
+              <span class="sw-badge status-live"><span class="pulse-dot"></span> SNN RUNTIME ACTIVE</span>
+              <span class="sw-badge" id="topbarModeTag">EVENT-DRIVEN SNN</span>
+              <span class="sw-badge dim">EXP #NC-SNN-2026-X1</span>
+              <span class="sw-badge dim">CPU HOSTED · DEMO</span>
+            </div>
           </div>
 
-          <div class="sim-layout">
-            <!-- EXPERIMENT CONTROLS PANEL -->
-            <aside class="panel control-panel">
+          <!-- DEDICATED PLAYBACK CONTROL TOOLBAR -->
+          <div class="sim-playback-toolbar">
+            <div class="sp-buttons">
+              <button class="btn btn-primary btn-sp-run" id="runSimulation">
+                <span class="run-icon">▶</span> Run Simulation
+              </button>
+              <button class="btn btn-secondary btn-sp" id="pauseSimulation" title="Pause simulation" disabled>
+                <span class="play-icon">⏸</span> Pause
+              </button>
+              <button class="btn btn-secondary btn-sp" id="resumeSimulation" title="Resume simulation" disabled>
+                <span class="play-icon">▶</span> Resume
+              </button>
+              <button class="btn btn-secondary btn-sp" id="stepSimulation" title="Step one simulation interval">
+                <span class="play-icon">⏭</span> Step
+              </button>
+              <button class="btn btn-ghost btn-sp" id="resetSimBtn" title="Reset simulation state">
+                ↺ Reset State
+              </button>
+            </div>
+            <div class="sp-controls">
+              <div class="sp-item">
+                <label for="simSpeed">Playback Speed:</label>
+                <select id="simSpeed" class="compact-select">
+                  <option value="0.5">0.5x (Slow)</option>
+                  <option value="1" selected>1.0x (Normal)</option>
+                  <option value="2">2.0x (Fast)</option>
+                  <option value="5">5.0x (Max)</option>
+                </select>
+              </div>
+              <div class="sp-item">
+                <label for="simulationSteps">Steps:</label>
+                <input type="range" id="simulationSteps" min="10" max="100" value="40" step="5" />
+                <output id="stepsOut">40 steps</output>
+              </div>
+              <div class="sp-item">
+                <label>Mode:</label>
+                <div class="segmented segmented-compact" id="executionMode">
+                  <button class="selected" data-mode="event">Event-Driven</button>
+                  <button data-mode="clock">Time-Stepped</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- MAIN 3-COLUMN WORKSTATION LAYOUT -->
+          <div class="sim-workstation-main">
+            <!-- COLUMN 1: CONTROLS & LIVE METRICS -->
+            <aside class="panel sim-column sim-col-left">
               <div class="panel-heading">
-                <div><div class="eyebrow">EXPERIMENT CONFIG</div><h3>Simulation controls</h3></div>
-                <button class="reset-button" id="resetSim" title="Reset all settings to default">↺</button>
+                <div>
+                  <div class="eyebrow">RUNTIME PARAMETERS</div>
+                  <h3>Network &amp; Input</h3>
+                </div>
+                <button class="reset-button" id="resetSim" title="Reset sliders to defaults">↺</button>
               </div>
 
               <!-- Sliders -->
-              <div class="control-group">
-                <div class="control-title"><label for="neuronCount">Network size</label><output id="neuronCountOut">48 neurons</output></div>
+              <div class="control-group compact-group">
+                <div class="control-title">
+                  <label for="neuronCount">Network Size</label>
+                  <output id="neuronCountOut">48 neurons</output>
+                </div>
                 <input type="range" id="neuronCount" min="12" max="96" value="48" step="12" />
-                <div class="range-labels"><span>12</span><span>96 neurons</span></div>
+                <div class="range-labels"><span>12</span><span>96 nodes</span></div>
               </div>
 
-              <div class="control-group">
-                <div class="control-title"><label for="inputSparsity">Input sparsity</label><output id="sparsityOut">70%</output></div>
+              <div class="control-group compact-group">
+                <div class="control-title">
+                  <label for="inputSparsity">Input Sparsity</label>
+                  <output id="sparsityOut">70%</output>
+                </div>
                 <input type="range" id="inputSparsity" min="0" max="95" value="70" step="5" />
                 <div class="range-labels"><span>Dense (0%)</span><span>Sparse (95%)</span></div>
               </div>
 
-              <div class="control-group">
-                <div class="control-title"><label for="firingThreshold">Firing threshold (Vth)</label><output id="thresholdOut">0.65</output></div>
+              <div class="control-group compact-group">
+                <div class="control-title">
+                  <label for="firingThreshold">Firing Threshold (Vth)</label>
+                  <output id="thresholdOut">0.65</output>
+                </div>
                 <input type="range" id="firingThreshold" min="25" max="100" value="65" step="5" />
                 <div class="range-labels"><span>0.25</span><span>1.00</span></div>
               </div>
 
-              <div class="control-group">
-                <div class="control-title"><label for="simulationSteps">Simulation steps</label><output id="stepsOut">40 steps</output></div>
-                <input type="range" id="simulationSteps" min="10" max="100" value="40" step="5" />
-                <div class="range-labels"><span>10</span><span>100 steps</span></div>
-              </div>
-
-              <div class="control-divider"></div>
-
-              <!-- Execution Mode -->
-              <div class="control-group">
-                <div class="control-title"><span class="control-label">Execution mode</span></div>
-                <div class="segmented" id="executionMode">
-                  <button class="selected" data-mode="event">Event-driven</button>
-                  <button data-mode="clock">Time-stepped</button>
-                </div>
-                <p class="field-hint">Event-driven processes active queues; time-stepped loops all neurons.</p>
-              </div>
-
-              <!-- Playback Speed -->
-              <div class="speed-control">
-                <label for="simSpeed">Playback Speed</label>
-                <select id="simSpeed">
-                  <option value="0.5">0.5x (Slow)</option>
-                  <option value="1" selected>1x (Normal)</option>
-                  <option value="2">2x (Fast)</option>
-                  <option value="5">5x (Maximum)</option>
-                </select>
-              </div>
-
-              <div class="control-divider"></div>
-
-              <!-- Adaptive Policies -->
+              <!-- Adaptive Policy Toggles -->
+              <div class="sw-section-divider"></div>
               <div class="control-title policy-heading">
-                <span class="control-label">Adaptive policies</span>
+                <span class="control-label">Adaptive Policies</span>
                 <span class="optional-label">RESEARCH</span>
               </div>
-              <label class="toggle-row">
-                <span><b>Adaptive threshold</b><small>Modulate threshold with incoming event density</small></span>
+              <label class="toggle-row compact-toggle">
+                <span><b>Adaptive Threshold</b><small>Activity-dependent</small></span>
                 <input type="checkbox" id="adaptiveThreshold" />
                 <i></i>
               </label>
-              <label class="toggle-row">
-                <span><b>Adaptive temporal bins</b><small>Coarsen temporal bins during low activity</small></span>
+              <label class="toggle-row compact-toggle">
+                <span><b>Temporal Binning</b><small>Activity scaling</small></span>
                 <input type="checkbox" id="adaptiveTemporal" />
                 <i></i>
               </label>
 
-              <div class="control-divider"></div>
-
-              <!-- Primary Run Button -->
-              <button class="btn btn-primary run-button" id="runSimulation">
-                <span class="run-icon">▶</span> Run simulation <span class="button-shortcut">↵</span>
-              </button>
-
-              <!-- Playback Control Toolbar (Pause / Resume / Step / Reset) -->
-              <div class="sim-playback">
-                <button class="btn btn-secondary" id="pauseSimulation" title="Pause simulation" disabled><span class="play-icon">⏸</span> Pause</button>
-                <button class="btn btn-secondary" id="resumeSimulation" title="Resume simulation" disabled><span class="play-icon">▶</span> Resume</button>
-                <button class="btn btn-secondary" id="stepSimulation" title="Step one simulation interval"><span class="play-icon">⏭</span> Step</button>
-                <button class="btn btn-ghost" id="resetSimBtn" title="Reset simulation state">↺ Reset</button>
+              <!-- Live Technical Metrics Readout -->
+              <div class="sw-section-divider"></div>
+              <div class="control-title">
+                <span class="control-label">Live Metrics</span>
+                <span class="mono-badge" id="metricSimTime">T+00 ms</span>
               </div>
-
-              <button class="btn btn-ghost full-button" id="clearSimulation">Clear visualization</button>
+              <div class="sim-metric-meters">
+                <div class="meter-row">
+                  <span>Output Spikes</span>
+                  <strong id="spikesMetric" class="text-cyan">—</strong>
+                </div>
+                <div class="meter-row">
+                  <span>Neuron Updates</span>
+                  <strong id="updatesMetric">—</strong>
+                </div>
+                <div class="meter-row">
+                  <span>Active Neurons</span>
+                  <strong id="activeMetric" class="text-turquoise">—</strong>
+                </div>
+                <div class="meter-row">
+                  <span>Inactive Neurons</span>
+                  <strong id="inactiveMetric" class="text-muted">—</strong>
+                </div>
+                <div class="meter-row">
+                  <span>Event Density</span>
+                  <strong id="densityMetric">—</strong>
+                </div>
+              </div>
             </aside>
 
-            <!-- SIMULATION MAIN AREA -->
-            <div class="sim-main">
-              <!-- 3D NEURAL NETWORK VISUALIZATION -->
-              <article class="panel network-panel">
-                <div class="panel-heading">
-                  <div><div class="eyebrow">LIVE 3D SNN NETWORK VIEW</div><h3>Neuron mesh &amp; spike propagation</h3></div>
-                  <div class="network-legend">
-                    <span><i class="legend-dot active-dot"></i> Spiking (#00D9FF)</span>
-                    <span><i class="legend-dot idle-dot"></i> Idle</span>
-                    <span><i class="legend-dot input-dot"></i> Input spike</span>
-                  </div>
+            <!-- COLUMN 2: CENTRAL 3D NEURAL NETWORK CENTERPIECE -->
+            <section class="panel sim-column sim-col-center">
+              <div class="sim-3d-header">
+                <div class="sim-3d-title-wrap">
+                  <span class="sw-dot-live"></span>
+                  <strong>CENTRAL 3D NEUROMORPHIC NETWORK</strong>
+                  <span class="sw-sub-badge" id="simModeBadge">MODE: EVENT-DRIVEN</span>
                 </div>
-
-                <!-- 3D Three.js Container -->
-                <div id="sim-three-container">
-                  <button class="camera-reset-btn" id="resetSimCamera" title="Reset 3D camera orientation">Reset View ↺</button>
-                  <div class="canvas-center-label" id="canvasPlaceholder">
-                    <div class="placeholder-orbit">◎</div>
-                    <strong>3D SNN Network Ready</strong>
-                    <span>Click Run or Step to trigger spike events.</span>
-                  </div>
-                  <div class="canvas-corner tl">3D LIF MESH</div>
-                  <div class="canvas-corner tr">WEBGL RENDER</div>
-                  <div class="canvas-corner bl" id="simModeBadge">MODE: EVENT-DRIVEN</div>
-                  <div class="canvas-corner br" id="networkFrame">STEP 00</div>
+                <!-- 3D HUD Controls -->
+                <div class="sim-3d-hud">
+                  <button class="hud-btn" id="toggleRotateBtn" title="Toggle Auto-Rotation">↺ Rotate</button>
+                  <button class="hud-btn" id="zoomInBtn" title="Zoom In">+</button>
+                  <button class="hud-btn" id="zoomOutBtn" title="Zoom Out">−</button>
+                  <button class="hud-btn" id="resetSimCamera" title="Reset 3D Camera">Reset ↺</button>
+                  <button class="hud-btn" id="toggle3DPauseBtn" title="Pause 3D Rendering">⏸ Pause 3D</button>
                 </div>
-
-                <!-- Fallback 2D Canvas (hidden when 3D is active) -->
-                <canvas id="networkCanvas" style="display:none;"></canvas>
-
-                <div class="network-footer">
-                  <span><i class="legend-dot signal-dot"></i> Synaptic delay buffer</span>
-                  <span class="network-foot-right" id="networkStatus">Awaiting execution</span>
-                </div>
-              </article>
-
-              <!-- SIMULATION METRICS / KPIS -->
-              <div class="sim-kpis">
-                <article class="panel mini-kpi">
-                  <span>SPIKES GENERATED</span>
-                  <strong id="spikesMetric">—</strong>
-                  <small>Output spike events</small>
-                </article>
-                <article class="panel mini-kpi">
-                  <span>NEURON UPDATES</span>
-                  <strong id="updatesMetric">—</strong>
-                  <small>Evaluated state transitions</small>
-                </article>
-                <article class="panel mini-kpi">
-                  <span>ACTIVE NEURONS</span>
-                  <strong id="activeMetric">—</strong>
-                  <small>Neurons firing this run</small>
-                </article>
-                <article class="panel mini-kpi">
-                  <span>EVENT DENSITY</span>
-                  <strong id="densityMetric">—</strong>
-                  <small>Activity ratio</small>
-                </article>
               </div>
 
-              <!-- SCIENTIFIC CHARTS GRID (MEMBRANE POTENTIAL, RASTER PLOT, ACTIVITY) -->
-              <div class="sim-charts-grid">
-                <!-- CHART 1: MEMBRANE POTENTIAL GRAPH -->
-                <article class="panel chart-card">
-                  <div class="panel-heading">
-                    <div>
-                      <div class="eyebrow">MEMBRANE DYNAMICS</div>
-                      <h3>Membrane potential trace (LIF)</h3>
-                    </div>
-                    <div class="chart-selector">
-                      <label for="membraneNeuronSelect">Inspect Neuron:</label>
-                      <select id="membraneNeuronSelect" class="compact-select"></select>
-                    </div>
-                  </div>
-                  <div class="chart-membrane">
-                    <canvas id="membraneChartCanvas"></canvas>
-                  </div>
-                  <div class="chart-footer">
-                    <span><i class="legend-line line-threshold"></i> Firing Threshold (Vth)</span>
-                    <span><i class="legend-line line-reset"></i> Reset Voltage (Vreset)</span>
-                    <span><i class="legend-line line-potential"></i> Membrane Potential V(t)</span>
-                  </div>
-                </article>
-
-                <!-- CHART 2: SPIKE RASTER PLOT -->
-                <article class="panel chart-card">
-                  <div class="panel-heading">
-                    <div>
-                      <div class="eyebrow">SPARSE TEMPORAL RASTER</div>
-                      <h3>Spike raster plot</h3>
-                    </div>
-                    <span class="subtle-tag" id="rasterSpikeCount">0 SPIKES</span>
-                  </div>
-                  <div class="chart-raster">
-                    <canvas id="rasterChartCanvas"></canvas>
-                  </div>
-                  <div class="chart-footer">
-                    <span>Y: Neuron Index</span>
-                    <span>X: Simulation Timestep</span>
-                    <span style="color:var(--cyan)">Cyan ticks: Spike firing event</span>
-                  </div>
-                </article>
-
-                <!-- CHART 3: SPIKE ACTIVITY & FREQUENCY GRAPH -->
-                <article class="panel chart-card">
-                  <div class="panel-heading">
-                    <div>
-                      <div class="eyebrow">POPULATION ACTIVITY</div>
-                      <h3>Spike count &amp; frequency</h3>
-                    </div>
-                    <span class="subtle-tag" id="activityRate">0 SPIKES/STEP</span>
-                  </div>
-                  <div class="chart-spike-activity">
-                    <canvas id="activityChartCanvas"></canvas>
-                  </div>
-                  <div class="chart-footer">
-                    <span><i class="legend-bar bar-spikes"></i> Spikes per step</span>
-                    <span><i class="legend-line line-freq"></i> Activity trend</span>
-                  </div>
-                </article>
+              <!-- 3D Viewport Container -->
+              <div class="sim-3d-viewport" id="sim-three-container">
+                <div class="canvas-center-label" id="canvasPlaceholder">
+                  <div class="placeholder-orbit">◎</div>
+                  <strong>Central 3D Network Ready</strong>
+                  <span>Click Run Simulation or Step to trigger spike events.</span>
+                </div>
+                <div class="viewport-hud-tag top-left">3D CLUSTERED MESH // WEBGL</div>
+                <div class="viewport-hud-tag top-right" id="networkFrame">STEP 00</div>
+                <div class="viewport-hud-tag bottom-left" id="networkStatus">Awaiting execution</div>
+                <div class="viewport-hud-tag bottom-right">LIF NEURON MODEL</div>
               </div>
 
-              <!-- SYNAPTIC EVENT QUEUE VISUALIZATION -->
-              <article class="panel event-queue-viz">
-                <div class="panel-heading">
-                  <div>
-                    <div class="eyebrow">EVENT SCHEDULER &amp; BUFFER</div>
-                    <h3>Active synaptic event queue</h3>
-                  </div>
-                  <span class="subtle-tag" id="queueLengthTag">0 EVENTS IN QUEUE</span>
+              <!-- 3D Footer Legend -->
+              <div class="sim-3d-footer">
+                <div class="sw-legend-group">
+                  <span><i class="legend-dot active-dot"></i> Spiking (#00D9FF)</span>
+                  <span><i class="legend-dot turquoise-dot"></i> Depolarizing</span>
+                  <span><i class="legend-dot idle-dot"></i> Resting</span>
+                  <span><i class="legend-dot signal-dot"></i> Synaptic delay</span>
                 </div>
-                <div class="eq-table-wrap">
-                  <table class="eq-table">
-                    <thead>
-                      <tr>
-                        <th>DUE STEP</th>
-                        <th>SRC NEURON</th>
-                        <th>TARGET NEURON</th>
-                        <th>WEIGHT</th>
-                        <th>STATUS</th>
-                      </tr>
-                    </thead>
-                    <tbody id="eventQueueBody">
-                      <tr><td colspan="5" class="empty-table">No pending synaptic events. Run or step simulation to observe queue activity.</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </article>
+                <button class="btn btn-ghost btn-xs" id="clearSimulation">Clear View</button>
+              </div>
+            </section>
 
-              <!-- EXECUTION TRACE LOG -->
-              <article class="panel log-panel">
-                <div class="panel-heading">
-                  <div><div class="eyebrow">EXECUTION TRACE</div><h3>Event log</h3></div>
-                  <span class="subtle-tag" id="logCount">0 EVENTS</span>
+            <!-- COLUMN 3: 2D NEURAL ACTIVITY MAP -->
+            <aside class="panel sim-column sim-col-right">
+              <div class="panel-heading">
+                <div>
+                  <div class="eyebrow">SPATIAL DISTRIBUTION</div>
+                  <h3>Neural Activity Map</h3>
                 </div>
-                <div class="event-log" id="eventLog">
-                  <div class="empty-log"><span>⌁</span> Simulation events will appear here during execution.</div>
+                <span class="subtle-tag" id="activityRate">0 HZ</span>
+              </div>
+
+              <!-- 2D Canvas Map -->
+              <div class="activity-map-wrap">
+                <canvas id="neuralActivityMapCanvas"></canvas>
+              </div>
+
+              <!-- Distribution Meter & Diagnostics -->
+              <div class="activity-distribution-box">
+                <div class="dist-header">
+                  <span>Network Activity Density</span>
+                  <span id="firingRateMetric">0 spikes/step</span>
                 </div>
-              </article>
+                <div class="dist-bar-track">
+                  <div class="dist-bar-fill" id="activityDistFill" style="width: 0%;"></div>
+                </div>
+              </div>
+
+              <div class="map-metrics-grid">
+                <div class="map-metric-cell">
+                  <span>SYNAPTIC OPS</span>
+                  <strong id="synapticEventsMetric">—</strong>
+                </div>
+                <div class="map-metric-cell">
+                  <span>QUEUE BUFFER</span>
+                  <strong id="queueSizeMetric">0 PENDING</strong>
+                </div>
+              </div>
+            </aside>
+          </div>
+
+          <!-- LOWER ANALYTICAL DASHBOARD (FOUR-PANEL ARRANGEMENT) -->
+          <div class="sim-analytics-dashboard">
+            <!-- PANEL A: MEMBRANE POTENTIAL -->
+            <article class="panel analytics-card">
+              <div class="panel-heading">
+                <div>
+                  <div class="eyebrow">MEMBRANE DYNAMICS</div>
+                  <h3>Membrane potential trace (LIF)</h3>
+                </div>
+                <div class="chart-selector">
+                  <label for="membraneNeuronSelect">Inspect:</label>
+                  <select id="membraneNeuronSelect" class="compact-select"></select>
+                </div>
+              </div>
+              <div class="chart-membrane">
+                <canvas id="membraneChartCanvas"></canvas>
+              </div>
+              <div class="chart-footer">
+                <span><i class="legend-line line-threshold"></i> Threshold (Vth)</span>
+                <span><i class="legend-line line-reset"></i> Reset (Vreset)</span>
+                <span><i class="legend-line line-potential"></i> Potential V(t)</span>
+              </div>
+            </article>
+
+            <!-- PANEL B: SPIKE RASTER PLOT -->
+            <article class="panel analytics-card">
+              <div class="panel-heading">
+                <div>
+                  <div class="eyebrow">SPARSE TEMPORAL RASTER</div>
+                  <h3>Spike raster plot</h3>
+                </div>
+                <span class="subtle-tag" id="rasterSpikeCount">0 SPIKES</span>
+              </div>
+              <div class="chart-raster">
+                <canvas id="rasterChartCanvas"></canvas>
+              </div>
+              <div class="chart-footer">
+                <span>Y: Neuron Index</span>
+                <span>X: Simulation Step</span>
+                <span class="text-cyan">Cyan ticks: Spike firing event</span>
+              </div>
+            </article>
+
+            <!-- PANEL C: POPULATION SPIKE ACTIVITY -->
+            <article class="panel analytics-card">
+              <div class="panel-heading">
+                <div>
+                  <div class="eyebrow">POPULATION ACTIVITY</div>
+                  <h3>Spike activity &amp; frequency</h3>
+                </div>
+                <span class="subtle-tag" id="activityRateTag">0 SPIKES/STEP</span>
+              </div>
+              <div class="chart-spike-activity">
+                <canvas id="activityChartCanvas"></canvas>
+              </div>
+              <div class="chart-footer">
+                <span><i class="legend-bar bar-spikes"></i> Spikes per bin</span>
+                <span><i class="legend-line line-freq"></i> Activity trend</span>
+              </div>
+            </article>
+
+            <!-- PANEL D: EVENT QUEUE INSPECTOR -->
+            <article class="panel analytics-card">
+              <div class="panel-heading">
+                <div>
+                  <div class="eyebrow">EVENT SCHEDULER &amp; BUFFER</div>
+                  <h3>Active synaptic event queue</h3>
+                </div>
+                <span class="subtle-tag" id="queueLengthTag">0 EVENTS IN QUEUE</span>
+              </div>
+              <div class="eq-table-wrap">
+                <table class="eq-table">
+                  <thead>
+                    <tr>
+                      <th>DUE</th>
+                      <th>SRC</th>
+                      <th>TARGET</th>
+                      <th>WEIGHT</th>
+                      <th>STATUS</th>
+                    </tr>
+                  </thead>
+                  <tbody id="eventQueueBody">
+                    <tr><td colspan="5" class="empty-table">No pending synaptic events. Run or step simulation to observe queue activity.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </article>
+          </div>
+
+          <!-- EXPERIMENT INFORMATION STRIP -->
+          <div class="sim-experiment-strip panel">
+            <div class="exp-strip-left">
+              <div class="exp-pill"><strong>EXPERIMENT:</strong> <span>NC-SNN-BENCH-01</span></div>
+              <div class="exp-pill"><strong>BACKEND:</strong> <span>CPU-HOSTED (EVENT-DRIVEN DEMO)</span></div>
+              <div class="exp-pill"><strong>PRECISION:</strong> <span>FP32 NORMALIZED</span></div>
+            </div>
+            <div class="exp-strip-right">
+              <span class="info-symbol">i</span>
+              <p>Discrete LIF SNN simulation with synaptic delay buffering. Computational proxies (state updates, synaptic events) are modeled algorithmically without fabricating measured hardware power.</p>
             </div>
           </div>
 
-          <div class="disclaimer-strip">
-            <span class="info-symbol">i</span>
-            <p><strong>Simulation model note:</strong> Discrete Leaky Integrate-and-Fire network with synaptic delays and event-driven queue scheduling. Graphs update dynamically from simulation states.</p>
-          </div>
+          <!-- EXECUTION TRACE LOG -->
+          <article class="panel log-panel" style="margin-top: 14px;">
+            <div class="panel-heading">
+              <div><div class="eyebrow">EXECUTION TRACE</div><h3>Event log</h3></div>
+              <span class="subtle-tag" id="logCount">0 EVENTS</span>
+            </div>
+            <div class="event-log" id="eventLog">
+              <div class="empty-log"><span>⌁</span> Simulation events will appear here during execution.</div>
+            </div>
+          </article>
         </section>
 
         <!-- ════════════════════════════════════════════════════════════════
