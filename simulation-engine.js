@@ -528,22 +528,26 @@ class SimulationEngine {
    * @param {SimConfig} [config]
    */
   init(config = {}) {
-    let sparsity = config.inputSparsity ?? 0.7;
+    let sparsity = config.inputSparsity ?? config.sparsity ?? 0.7;
     if (sparsity > 1) sparsity = sparsity / 100;
     const seed = config.seed !== undefined ? config.seed : 42;
+    const executionMode = config.executionMode || config.mode || 'event';
+    const steps = config.steps || config.simulationSteps || 30;
 
     this.config = {
       neuronCount: 48,
       connectionDensity: 0.3,
       inputSparsity: sparsity,
       firingThreshold: 0.65,
-      executionMode: 'event',
+      executionMode,
       adaptiveThreshold: false,
       adaptiveTemporal: false,
-      steps: 30,
+      steps,
       seed,
       ...config,
+      executionMode,
       inputSparsity: sparsity,
+      steps,
       seed,
     };
 

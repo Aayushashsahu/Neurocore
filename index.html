@@ -52,7 +52,7 @@
           <div class="system-progress"><span></span></div>
           <div class="system-foot"><span>Prototype stage</span><span>01 / 04</span></div>
         </div>
-        <div class="sidebar-footer"><span>NEUROCORE v2.1.1</span><span>·</span><span>RESEARCH PLATFORM</span></div>
+        <div class="sidebar-footer"><span>NEUROCORE v2.2.0</span><span>·</span><span>RESEARCH PLATFORM</span></div>
       </div>
     </aside>
 
@@ -83,7 +83,7 @@
               <p class="page-subtitle">Explore event-driven spiking neural networks, adaptive computation and hardware-aware benchmarking.</p>
             </div>
             <div class="heading-actions">
-              <span class="version-chip">BUILD 2.1.1</span>
+              <span class="version-chip">BUILD 2.2.0</span>
               <button class="btn btn-primary" data-goto="simulator"><span>Run a simulation</span><b>↗</b></button>
             </div>
           </div>
@@ -621,137 +621,303 @@
         </section>
 
         <!-- ════════════════════════════════════════════════════════════════
-             PAGE 3: BENCHMARK LAB (UPGRADED)
+             PAGE 3: EXPERIMENTAL BENCHMARK LAB (v2.2.0 EMPIRICAL PLATFORM)
              ════════════════════════════════════════════════════════════════ -->
         <section class="page" id="page-benchmarks">
           <div class="page-heading compact-heading">
             <div>
-              <div class="eyebrow"><span class="eyebrow-line"></span> PERFORMANCE EXPLORATION / 02</div>
-              <h1>Benchmark <span>lab.</span></h1>
-              <p class="page-subtitle">Compare computational activity across Dense ANN, Time-stepped SNN, and Event-driven SNN execution strategies.</p>
+              <div class="eyebrow"><span class="eyebrow-line"></span> EMPIRICAL SNN EVALUATION PLATFORM / V2.2.0</div>
+              <h1>Experimental <span>benchmark lab.</span></h1>
+              <p class="page-subtitle">Execute multi-trial simulations using the actual SNN engine, compute sample statistics (Mean ± SD), evaluate paired execution modes on identical seeds, and export reproducible experimental datasets.</p>
             </div>
-            <span class="simulation-badge"><span class="pulse-dot"></span> MODELLED COUNTERS</span>
+            <span class="simulation-badge" id="benchCampaignStatus"><span class="pulse-dot"></span> BENCHMARK READY</span>
           </div>
 
-          <!-- WORKLOAD CONFIGURATION -->
-          <article class="panel benchmark-config">
-            <div>
-              <div class="eyebrow">WORKLOAD CONFIGURATION</div>
-              <h3>Adjust input sparsity</h3>
-              <p>Compare modeled neuron-state evaluations and compute proxies across execution strategies.</p>
-            </div>
-            <div class="benchmark-slider">
-              <div class="control-title">
-                <label for="benchSparsity">Input sparsity</label>
-                <output id="benchSparsityOut">70%</output>
+          <!-- CAMPAIGN LAUNCHER & CONFIGURATION PANEL -->
+          <article class="panel exp-launcher-panel">
+            <div class="exp-preset-bar">
+              <span class="exp-preset-label">CAMPAIGN PRESET:</span>
+              <div class="segmented-modes" id="expCampaignPreset" role="group" aria-label="Campaign Preset">
+                <button class="mode-pill selected" data-preset="quick" title="10 paired repetitions at 48 neurons, 70% sparsity">Quick (10 Paired Reps)</button>
+                <button class="mode-pill" data-preset="sparsity_sweep" title="Multi-point sweep across 50%, 70%, 80%, 90%, 95% input sparsity">Sparsity Sweep (50%–95%)</button>
+                <button class="mode-pill" data-preset="scale_sweep" title="Multi-scale sweep across 24, 48, 72, 96 neurons">Scaling Sweep (24–96 Nodes)</button>
+                <button class="mode-pill" data-preset="custom" title="Custom configuration and repetition count">Custom Experiment</button>
               </div>
-              <input type="range" id="benchSparsity" min="0" max="95" value="70" step="5" />
-              <div class="range-labels"><span>0% · Dense</span><span>95% · Sparse</span></div>
             </div>
-            <div class="benchmark-actions">
-              <button class="btn btn-secondary" id="refreshBench">Recalculate <span>↻</span></button>
-              <button class="csv-download-btn" id="downloadBenchCSV"><span>⬇</span> Download CSV</button>
+
+            <!-- Parameters Grid -->
+            <div class="exp-config-grid">
+              <div class="exp-cfg-col">
+                <label for="expNeuronCount">Network Size</label>
+                <select id="expNeuronCount" class="sw-select compact-select">
+                  <option value="24">24 neurons</option>
+                  <option value="48" selected>48 neurons (Standard)</option>
+                  <option value="72">72 neurons</option>
+                  <option value="96">96 neurons (Full Mesh)</option>
+                </select>
+                <span class="exp-cfg-hint">LIF nodes per network</span>
+              </div>
+
+              <div class="exp-cfg-col">
+                <label for="expSparsity">Input Sparsity</label>
+                <select id="expSparsity" class="sw-select compact-select">
+                  <option value="50">50% (Dense burst)</option>
+                  <option value="70" selected>70% (Standard sparse)</option>
+                  <option value="80">80% (High sparsity)</option>
+                  <option value="90">90% (Ultra-sparse)</option>
+                  <option value="95">95% (Extreme sparse)</option>
+                </select>
+                <span class="exp-cfg-hint">Bernoulli zero probability</span>
+              </div>
+
+              <div class="exp-cfg-col">
+                <label for="expSteps">Simulation Steps</label>
+                <select id="expSteps" class="sw-select compact-select">
+                  <option value="30">30 steps</option>
+                  <option value="50" selected>50 steps (Standard)</option>
+                  <option value="100">100 steps</option>
+                  <option value="200">200 steps (Extended)</option>
+                </select>
+                <span class="exp-cfg-hint">Discrete steps per trial</span>
+              </div>
+
+              <div class="exp-cfg-col">
+                <label for="expReps">Repetitions (Trials)</label>
+                <select id="expReps" class="sw-select compact-select">
+                  <option value="5">5 Paired Reps (10 runs)</option>
+                  <option value="10" selected>10 Paired Reps (20 runs)</option>
+                  <option value="20">20 Paired Reps (40 runs)</option>
+                  <option value="30">30 Paired Reps (60 runs)</option>
+                </select>
+                <span class="exp-cfg-hint">Independent seed trials</span>
+              </div>
+
+              <div class="exp-cfg-col">
+                <label for="expBaseSeed">Base Seed</label>
+                <div class="seed-input-wrap">
+                  <input type="number" id="expBaseSeed" value="42" min="1" max="999999" class="seed-input" />
+                  <button type="button" class="seed-rand-btn" id="expRandomSeedBtn" title="Randomize Base Seed">🎲</button>
+                </div>
+                <span class="exp-cfg-hint">Mulberry32 PRNG root</span>
+              </div>
+
+              <div class="exp-cfg-col">
+                <label for="expDensity">Synaptic Density</label>
+                <div class="range-with-val">
+                  <input type="range" id="expDensity" min="10" max="45" value="25" step="5" />
+                  <output id="expDensityOut">0.25</output>
+                </div>
+                <span class="exp-cfg-hint">Connection probability</span>
+              </div>
+
+              <div class="exp-cfg-col">
+                <label for="expThreshold">Firing Threshold (Vth)</label>
+                <div class="range-with-val">
+                  <input type="range" id="expThreshold" min="30" max="90" value="65" step="5" />
+                  <output id="expThresholdOut">0.65</output>
+                </div>
+                <span class="exp-cfg-hint">Normalized spike voltage</span>
+              </div>
+
+              <div class="exp-cfg-col exp-cfg-toggles">
+                <label>Adaptive Policies</label>
+                <div class="exp-policy-toggles">
+                  <label class="compact-check"><input type="checkbox" id="expAdaptiveThresh" /><span>Threshold</span></label>
+                  <label class="compact-check"><input type="checkbox" id="expAdaptiveTemporal" /><span>Temporal</span></label>
+                </div>
+                <span class="exp-cfg-hint">Dynamic policies</span>
+              </div>
+            </div>
+
+            <!-- Action Strip & Live Progress Bar -->
+            <div class="exp-action-strip">
+              <div class="exp-action-buttons">
+                <button class="btn btn-primary" id="runCampaignBtn">
+                  <span class="run-icon">▶</span> Run Experiment Campaign
+                </button>
+                <button class="btn btn-secondary" id="cancelCampaignBtn" disabled>
+                  <span class="play-icon">⏹</span> Cancel Run
+                </button>
+              </div>
+
+              <div class="exp-progress-wrap">
+                <div class="exp-progress-track">
+                  <div class="exp-progress-fill" id="expProgressFill" style="width: 0%;"></div>
+                </div>
+                <div class="exp-progress-status-row">
+                  <span class="exp-progress-text" id="expProgressText">Ready to execute empirical simulation campaign.</span>
+                  <span class="exp-progress-pct" id="expProgressPct">0%</span>
+                </div>
+              </div>
             </div>
           </article>
 
-          <!-- SUMMARY KPIS -->
-          <div class="benchmark-summary">
-            <div class="benchmark-summary-main">
-              <span>MODELLED WORKLOAD</span>
-              <strong id="benchWorkload">10,000</strong>
-              <small>neuron-step opportunities</small>
+          <!-- EXPERIMENT OVERVIEW & PARITY AUDIT -->
+          <div class="exp-overview-strip" id="expOverviewStrip">
+            <div class="eos-left">
+              <span class="eos-tag" id="expIdTag">EXP #NO-DATA</span>
+              <strong id="expSummaryTitle">No active experiment run. Click "Run Experiment Campaign" to initiate.</strong>
             </div>
-            <div>
-              <span>EVENT-DRIVEN INTEGRATIONS</span>
-              <strong id="benchEventUpdates">3,000</strong>
-              <small>sparse evaluations</small>
-            </div>
-            <div>
-              <span>TIME-STEPPED INTEGRATIONS</span>
-              <strong id="benchClockUpdates">10,000</strong>
-              <small>fixed evaluations</small>
-            </div>
-            <div>
-              <span>SKIPPED OPPORTUNITIES</span>
-              <strong id="benchSkipped">70%</strong>
-              <small>compute reduction</small>
+            <div class="eos-right">
+              <span class="eos-pill" id="expParityPill">PARITY CHECK PENDING</span>
+              <span class="eos-pill dim" id="expTrialsCountPill">0 / 0 TRIALS</span>
             </div>
           </div>
 
-          <!-- BENCHMARK CHARTS (GROUPED BAR, SPARSITY CURVE, LATENCY PROXY) -->
+          <!-- EMPIRICAL STATISTICAL SUMMARY CARDS (6 CARDS) -->
+          <div class="exp-kpi-grid">
+            <div class="exp-kpi-card">
+              <span class="kpi-label">EVENT-DRIVEN INTEGRATIONS</span>
+              <strong class="kpi-val text-cyan" id="kpiEventIntegrations">—</strong>
+              <small class="kpi-sub" id="kpiEventIntegrationsSub">Mean ± Sample SD</small>
+            </div>
+            <div class="exp-kpi-card">
+              <span class="kpi-label">TIME-STEPPED INTEGRATIONS</span>
+              <strong class="kpi-val" id="kpiClockIntegrations">—</strong>
+              <small class="kpi-sub" id="kpiClockIntegrationsSub">Mean ± Sample SD</small>
+            </div>
+            <div class="exp-kpi-card highlighted-kpi">
+              <span class="kpi-label">PAIRED INTEGRATION REDUCTION</span>
+              <strong class="kpi-val text-cyan" id="kpiReduction">—</strong>
+              <small class="kpi-sub" id="kpiReductionSub">Algorithmic compute reduction</small>
+            </div>
+            <div class="exp-kpi-card">
+              <span class="kpi-label">DELIVERED SYNAPTIC EVENTS</span>
+              <strong class="kpi-val" id="kpiDeliveredEvents">—</strong>
+              <small class="kpi-sub" id="kpiDeliveredEventsSub">Mean ± Sample SD</small>
+            </div>
+            <div class="exp-kpi-card">
+              <span class="kpi-label">SPIKE OUTPUT COUNT</span>
+              <strong class="kpi-val text-turquoise" id="kpiSpikeCount">—</strong>
+              <small class="kpi-sub" id="kpiSpikeCountSub">Mean ± Sample SD</small>
+            </div>
+            <div class="exp-kpi-card">
+              <span class="kpi-label">SIMULATION KERNEL TIME</span>
+              <strong class="kpi-val" id="kpiKernelDuration">—</strong>
+              <small class="kpi-sub" id="kpiKernelDurationSub">Measured browser runtime (ms)</small>
+            </div>
+          </div>
+
+          <!-- EMPIRICAL CHARTS GRID -->
           <div class="benchmark-charts-grid">
-            <!-- CHART 1: GROUPED BAR CHART -->
+            <!-- CHART 1: EMPIRICAL GROUPED BAR CHART WITH ERROR BARS -->
             <article class="panel">
               <div class="panel-heading">
-                <div><div class="eyebrow">EXECUTION MODE COMPARISON</div><h3>Computational activity by metric</h3></div>
-                <span class="subtle-tag">SIMULATED PROXY</span>
+                <div>
+                  <div class="eyebrow">EXECUTION MODE COMPARISON</div>
+                  <h3>Computational activity by metric</h3>
+                </div>
+                <span class="subtle-tag" id="benchChart1Tag">MEAN ± SAMPLE SD</span>
               </div>
               <div class="benchmark-chart-container">
                 <canvas id="benchGroupedCanvas"></canvas>
               </div>
             </article>
 
-            <!-- CHART 2: SPARSITY CURVE -->
+            <!-- CHART 2: EMPIRICAL SPARSITY SENSITIVITY CURVE -->
             <article class="panel">
               <div class="panel-heading">
-                <div><div class="eyebrow">SPARSITY SENSITIVITY</div><h3>Neuron updates vs. Input sparsity</h3></div>
-                <span class="subtle-tag">ILLUSTRATIVE</span>
+                <div>
+                  <div class="eyebrow">SPARSITY SENSITIVITY</div>
+                  <h3>Neuron updates vs. Input sparsity</h3>
+                </div>
+                <span class="subtle-tag" id="benchChart2Tag">EMPIRICAL DATA</span>
               </div>
               <div class="benchmark-chart-container">
                 <canvas id="benchSparsityCanvas"></canvas>
               </div>
             </article>
 
-            <!-- CHART 3: LATENCY COMPARISON -->
+            <!-- CHART 3: KERNEL DURATION DISTRIBUTION -->
             <article class="panel" style="grid-column: 1 / -1;">
               <div class="panel-heading">
-                <div><div class="eyebrow">EXECUTION LATENCY PROXY</div><h3>Estimated relative latency (normalized cycles)</h3></div>
-                <span class="subtle-tag">SIMULATED PROXY</span>
+                <div>
+                  <div class="eyebrow">MEASURED EXECUTION DURATION</div>
+                  <h3>Simulation kernel runtime per repetition (performance.now)</h3>
+                </div>
+                <span class="subtle-tag">BROWSER KERNEL RUNTIME</span>
               </div>
-              <div class="benchmark-chart-container" style="height: 180px;">
+              <div class="benchmark-chart-container" style="height: 190px;">
                 <canvas id="benchLatencyCanvas"></canvas>
               </div>
             </article>
           </div>
 
-          <!-- COMPARISON SUMMARY & METRIC INTEGRITY -->
-          <div class="benchmark-grid" style="margin-top:14px;">
-            <article class="panel comparison-panel">
-              <div class="panel-heading">
-                <div><div class="eyebrow">EXECUTION COMPARISON</div><h3>At this sparsity level</h3></div>
-              </div>
-              <div class="comparison-row">
-                <div class="comparison-icon ann-icon">A</div>
-                <div class="comparison-detail"><strong>Dense ANN baseline</strong><small>Fixed full workload every cycle</small></div>
-                <strong class="comparison-value">10,000</strong>
-              </div>
-              <div class="comparison-row">
-                <div class="comparison-icon clock-icon">T</div>
-                <div class="comparison-detail"><strong>Time-stepped SNN</strong><small>Updates every neuron every dt</small></div>
-                <strong class="comparison-value">10,000</strong>
-              </div>
-              <div class="comparison-row highlighted-row">
-                <div class="comparison-icon event-icon">E</div>
-                <div class="comparison-detail"><strong>Event-driven model</strong><small>Evaluates only on incoming events</small></div>
-                <strong class="comparison-value" id="compareEvent">3,000</strong>
-              </div>
-              <div class="comparison-callout">
-                <span>↗</span>
-                <p><strong id="modeledReduction">70% fewer updates</strong><br/>in this modeled activity proxy.</p>
-              </div>
-            </article>
-
-            <article class="panel metric-integrity">
-              <div class="integrity-icon">i</div>
+          <!-- DETAILED STATISTICAL RESULTS TABLE -->
+          <article class="panel exp-table-panel" style="margin-top: 14px;">
+            <div class="panel-heading">
               <div>
-                <strong>Measurement integrity comes first.</strong>
-                <p>Event-driven scheduling incurs queue insertion and buffer management overhead. Fewer modeled state updates do not automatically guarantee lower wall-clock latency or Joules on commodity hardware. True physical energy and latency must be measured with physical instruments on the exact target backend.</p>
+                <div class="eyebrow">STATISTICAL AUDIT</div>
+                <h3>Empirical Results Table</h3>
               </div>
-              <button class="panel-link" data-goto="research">See experiment methodology →</button>
-            </article>
+              <span class="subtle-tag" id="expTableRowsTag">0 METRICS</span>
+            </div>
+            <div class="exp-table-wrap">
+              <table class="exp-results-table" id="expResultsTable">
+                <thead>
+                  <tr>
+                    <th>Metric</th>
+                    <th>Strategy</th>
+                    <th>N</th>
+                    <th>Mean</th>
+                    <th>Sample SD (n-1)</th>
+                    <th>Median</th>
+                    <th>Min</th>
+                    <th>Max</th>
+                    <th>Unit</th>
+                  </tr>
+                </thead>
+                <tbody id="expResultsTbody">
+                  <tr>
+                    <td colspan="9" class="empty-table">No completed trials. Click "Run Experiment Campaign" to execute empirical simulations.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <!-- THEORETICAL DENSE ANN REFERENCE BOX (SEPARATED) -->
+          <article class="panel exp-ann-reference-box" style="margin-top: 14px;">
+            <div class="panel-heading">
+              <div>
+                <div class="eyebrow text-muted">THEORETICAL REFERENCE BASELINE</div>
+                <h3>Dense Artificial Neural Network (Matrix-Vector Multiply)</h3>
+              </div>
+              <span class="subtle-tag">ANALYTICAL REFERENCE</span>
+            </div>
+            <div class="ann-ref-content">
+              <div class="ann-ref-text">
+                <p>Because NEUROCORE is an event-driven Spiking Neural Network platform, dense feedforward ANN workloads are <strong>not simulated by the LIF kernel</strong>. Instead, the Dense ANN baseline represents the standard theoretical arithmetic workload of non-spiking neural networks computing continuous matrix-vector products every clock cycle:</p>
+                <code>W_ops = N_inputs × N_outputs × T_steps (Fixed full-matrix multiply-accumulate every cycle)</code>
+                <p class="ann-ref-note">This theoretical baseline provides mathematical context for the algorithmic state updates required by non-sparse architectures. It is strictly separated from the empirical SNN simulation measurements reported above.</p>
+              </div>
+              <div class="ann-ref-calc">
+                <span>ESTIMATED DENSE ANN OPS:</span>
+                <strong id="annOpsEstimate">115,200 MACs</strong>
+                <small id="annOpsFormula">48 × 48 × 50 steps</small>
+              </div>
+            </div>
+          </article>
+
+          <!-- EXPORT CONTROLS BAR -->
+          <div class="exp-export-bar" style="margin-top: 14px;">
+            <div class="eeb-left">
+              <span class="export-label">REPRODUCIBLE EXPERIMENT DATASETS:</span>
+            </div>
+            <div class="eeb-right">
+              <button class="csv-download-btn" id="exportRawCSVBtn" disabled>
+                <span>⬇</span> Export Raw Trials (CSV)
+              </button>
+              <button class="csv-download-btn" id="exportSummaryCSVBtn" disabled>
+                <span>⬇</span> Export Statistical Summary (CSV)
+              </button>
+              <button class="btn btn-secondary" id="exportCompleteJSONBtn" disabled>
+                <span>⤓</span> Export Complete Experiment (JSON)
+              </button>
+            </div>
           </div>
 
-          <p class="footnote">*Illustrative counters and proxy graphs are calculated algorithmically by the browser. No physical device instrumentation, external power sensing, or fabricated experimental results are reported.</p>
+          <p class="footnote" style="margin-top: 14px;">*All experimental results displayed above are computed from actual multi-trial simulation runs executed by the browser using the deterministic Leaky Integrate-and-Fire simulation engine. Execution times reflect browser performance.now() durations. No physical hardware energy consumption or custom neuromorphic chip validation is claimed.</p>
         </section>
 
         <!-- ════════════════════════════════════════════════════════════════
@@ -991,7 +1157,7 @@
         <footer class="global-footer">
           <span>© 2026 NEUROCORE RESEARCH PROJECT</span>
           <span>ADAPTIVE EVENT-DRIVEN EDGE INTELLIGENCE</span>
-          <span>RESEARCH PLATFORM · V2.1.1</span>
+          <span>RESEARCH PLATFORM · V2.2.0</span>
         </footer>
       </div>
     </main>
@@ -1005,13 +1171,13 @@
     <div class="modal panel">
       <button class="modal-close" id="closeModal">×</button>
       <div class="eyebrow">ABOUT THIS BUILD</div>
-      <h2>NEUROCORE <span>v2.1.1</span></h2>
-      <p>This is an upgraded interactive demonstration of the NEUROCORE adaptive neuromorphic research platform. It features full 3D neural network visualizations with Three.js, a genuine sparse event-driven Leaky Integrate-and-Fire simulation engine, scientific membrane dynamics and spike raster charts, and an interactive architecture explorer.</p>
+      <h2>NEUROCORE <span>v2.2.0</span></h2>
+      <p>This is an upgraded interactive demonstration of the NEUROCORE adaptive neuromorphic research platform. It features full 3D neural network visualizations with Three.js, a genuine sparse event-driven Leaky Integrate-and-Fire simulation engine, empirical multi-trial statistical benchmarking with paired execution comparisons, scientific membrane dynamics and spike raster charts, and an interactive architecture explorer.</p>
       <div class="modal-facts">
-        <div><span>Build</span><b>2.1.1</b></div>
+        <div><span>Build</span><b>2.2.0</b></div>
         <div><span>3D Engine</span><b>Three.js WebGL</b></div>
         <div><span>SNN Engine</span><b>Discrete LIF</b></div>
-        <div><span>Data Source</span><b>Local Simulation</b></div>
+        <div><span>Benchmark</span><b>Empirical Multi-Trial</b></div>
       </div>
       <button class="btn btn-primary full-button" id="modalOkay">Explore Platform</button>
     </div>
@@ -1019,6 +1185,7 @@
 
   <!-- JAVASCRIPT MODULES & CONTROLLER -->
   <script src="simulation-engine.js" defer></script>
+  <script src="experiment-runner.js" defer></script>
   <script src="charts.js" defer></script>
   <script src="architecture-interactive.js" defer></script>
   <script type="module" src="three-viz.js"></script>

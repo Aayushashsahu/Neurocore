@@ -664,7 +664,7 @@
       // find max value for Y scale
       let maxVal = 0;
       for (const g of groups) {
-        maxVal = Math.max(maxVal, g.ann, g.clock, g.event);
+        maxVal = Math.max(maxVal, g.ann || 0, g.clock || 0, g.event || 0);
       }
       maxVal = maxVal * 1.15 || 1;
 
@@ -700,7 +700,7 @@
 
       for (let gi = 0; gi < groups.length; gi++) {
         const g    = groups[gi];
-        const vals = [g.ann, g.clock, g.event];
+        const vals = [g.ann || 0, g.clock || 0, g.event || 0];
         const gx   = pa.x + gi * groupW;
 
         for (let bi = 0; bi < barCount; bi++) {
@@ -723,8 +723,330 @@
       // legend
       _drawLegend(ctx, pa, labels, colors);
 
-      // "SIMULATED PROXY" label
+      // watermark label
       _drawWatermark(ctx, pa, 'SIMULATED PROXY');
+    },
+
+    /**
+     * D1b — Empirical Grouped Bar Chart with Sample Standard Deviation Error Bars.
+     * Compares Time-stepped SNN vs Event-driven SNN using genuine simulation trials.
+     * @param {HTMLCanvasElement} canvas
+     * @param {{ groups: { label: string, clockMean: number, clockSD: number|null, eventMean: number, eventSD: number|null, unit: string }[] }} data
+     */
+    renderGroupedBarWithErrors(canvas, data) {
+      const { ctx, w, h } = prepCanvas(canvas);
+      clearCanvas(ctx, w, h);
+      const pa = plotArea(w, h);
+
+      const groups = data.groups;
+      if (!groups || groups.length === 0) return;
+
+      // Find max Y extent including upper error bars
+      let maxY = 0;
+      for (const g of groups) {
+        const clPeak = (g.clockMean || 0) + (g.clockSD || 0);
+        const evPeak = (g.eventMean || 0) + (g.eventSD || 0);
+        maxY = Math.max(maxY, clPeak, evPeak, g.clockMean || 0, g.eventMean || 0);
+      }
+      maxY = maxY * 1.25 || 1;
+
+      // Y Grid
+      const yTicks = 5;
+      ctx.save();
+      ctx.strokeStyle = C.GRID;
+      ctx.lineWidth = 1;
+      ctx.fillStyle = C.TEXT;
+      ctx.font = FONT;
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      for (let i = 0; i <= yTicks; i++) {
+        const val = (maxY / yTicks) * i;
+        const yPx = pa.y + pa.h - (i / yTicks) * pa.h;
+        ctx.beginPath();
+        ctx.moveTo(pa.x + 0.5, Math.round(yPx) + 0.5);
+        ctx.lineTo(pa.x + pa.w + 0.5, Math.round(yPx) + 0.5);
+        ctx.stroke();
+        ctx.fillText(_shortNum(val), pa.x - 4, yPx);
+      }
+      ctx.restore();
+
+      // Bars & Error Whiskers
+      const groupW = pa.w / groups.length;
+      const barCount = 2; // Time-stepped SNN & Event-driven SNN
+      const barPad = 6;
+      const totalPad = barPad * (barCount + 1);
+      const barW = Math.max(8, (groupW - totalPad) / barCount);
+      const colors = [C.BAR_CLOCK, C.BAR_EVENT];
+      const labels = ['Time-stepped SNN', 'Event-driven SNN'];
+
+      for (let gi = 0; gi < groups.length; gi++) {
+        const g = groups[gi];
+        const means = [g.clockMean || 0, g.eventMean || 0];
+        const sds = [g.clockSD, g.eventSD];
+        const gx = pa.x + gi * groupW;
+
+        for (let bi = 0; bi < barCount; bi++) {
+          const mVal = means[bi];
+          const sdVal = sds[bi];
+          const bh = (mVal / maxY) * pa.h;
+          const bx = gx + barPad * (bi + 1) + bi * barW;
+          const by = pa.y + pa.h - bh;
+
+          // Draw main bar
+          ctx.fillStyle = colors[bi];
+          ctx.fillRect(bx, by, barW, bh);
+
+          // Draw error bar whisker if SD exists
+          if (sdVal !== null && sdVal !== undefined && sdVal > 0) {
+            const errTopVal = Math.min(maxY * 1.2, mVal + sdVal);
+            const errBotVal = Math.max(0, mVal - sdVal);
+            const errTopY = pa.y + pa.h - (errTopVal / maxY) * pa.h;
+            const errBotY = pa.y + pa.h - (errBotVal / maxY) * pa.h;
+            const errX = bx + barW / 2;
+
+            ctx.save();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            // Vertical error spine
+            ctx.moveTo(errX, errBotY);
+            ctx.lineTo(errX, errTopY);
+            // Upper cap
+            ctx.moveTo(errX - 3, errTopY);
+            ctx.lineTo(errX + 3, errTopY);
+            // Lower cap
+            ctx.moveTo(errX - 3, errBotY);
+            ctx.lineTo(errX + 3, errBotY);
+            ctx.stroke();
+            ctx.restore();
+          }
+
+          // Mean value text above bar
+          ctx.save();
+          ctx.fillStyle = C.TEXT;
+          ctx.font = '8px monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+          const textY = (sdVal && sdVal > 0) ? (pa.y + pa.h - ((mVal + sdVal) / maxY) * pa.h - 3) : (by - 2);
+          ctx.fillText(_shortNum(mVal), bx + barW / 2, Math.max(pa.y + 10, textY));
+          ctx.restore();
+        }
+
+        // Group label
+        ctx.save();
+        ctx.fillStyle = C.TEXT;
+        ctx.font = FONT;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText(g.label, gx + groupW / 2, pa.y + pa.h + 5);
+        ctx.restore();
+      }
+
+      // Legend
+      _drawLegend(ctx, pa, labels, colors);
+
+      // Watermark
+      _drawWatermark(ctx, pa, 'EMPIRICAL SIMULATION (MEAN ± SD)');
+    },
+
+    /**
+     * D2b — Empirical Sparsity Sensitivity Curve with Error Whiskers.
+     * @param {HTMLCanvasElement} canvas
+     * @param {{ levels: number[], clockSeries: { label: string, means: number[], sds: (number|null)[] }, eventSeries: { label: string, means: number[], sds: (number|null)[] } }} data
+     */
+    renderEmpiricalSparsitySensitivity(canvas, data) {
+      const { ctx, w, h } = prepCanvas(canvas);
+      clearCanvas(ctx, w, h);
+      const pa = plotArea(w, h);
+
+      const levels = data.levels || [];
+      const clockS = data.clockSeries;
+      const eventS = data.eventSeries;
+      if (levels.length === 0 || !clockS || !eventS) return;
+
+      const series = [
+        { label: clockS.label || 'Time-stepped SNN', color: C.BAR_CLOCK, means: clockS.means, sds: clockS.sds },
+        { label: eventS.label || 'Event-driven SNN', color: C.BAR_EVENT, means: eventS.means, sds: eventS.sds },
+      ];
+
+      // Find max Y
+      let maxY = 0;
+      series.forEach(s => {
+        for (let i = 0; i < s.means.length; i++) {
+          const m = s.means[i] || 0;
+          const sd = (s.sds && s.sds[i]) || 0;
+          maxY = Math.max(maxY, m + sd);
+        }
+      });
+      maxY = maxY * 1.2 || 1;
+
+      const minX = levels[0];
+      const maxX = levels[levels.length - 1];
+
+      // Y Grid
+      const yTicks = 5;
+      ctx.save();
+      ctx.strokeStyle = C.GRID;
+      ctx.lineWidth = 1;
+      ctx.fillStyle = C.TEXT;
+      ctx.font = FONT;
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      for (let i = 0; i <= yTicks; i++) {
+        const val = (maxY / yTicks) * i;
+        const yPx = pa.y + pa.h - (i / yTicks) * pa.h;
+        ctx.beginPath();
+        ctx.moveTo(pa.x + 0.5, Math.round(yPx) + 0.5);
+        ctx.lineTo(pa.x + pa.w + 0.5, Math.round(yPx) + 0.5);
+        ctx.stroke();
+        ctx.fillText(_shortNum(val), pa.x - 4, yPx);
+      }
+      ctx.restore();
+
+      // X Labels
+      ctx.save();
+      ctx.fillStyle = C.TEXT;
+      ctx.font = FONT;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      for (let i = 0; i < levels.length; i++) {
+        const frac = levels.length > 1 ? (levels[i] - minX) / (maxX - minX) : 0.5;
+        const xPx = pa.x + frac * pa.w;
+        ctx.fillText(`${levels[i]}%`, xPx, pa.y + pa.h + 4);
+      }
+      ctx.restore();
+
+      // Draw Series Curves & Whiskers
+      series.forEach(s => {
+        if (!s.means || s.means.length === 0) return;
+
+        // Line curve
+        ctx.save();
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let i = 0; i < s.means.length; i++) {
+          const frac = levels.length > 1 ? (levels[i] - minX) / (maxX - minX) : 0.5;
+          const xPx = pa.x + frac * pa.w;
+          const yPx = pa.y + pa.h - (s.means[i] / maxY) * pa.h;
+          if (i === 0) ctx.moveTo(xPx, yPx);
+          else ctx.lineTo(xPx, yPx);
+        }
+        ctx.stroke();
+        ctx.restore();
+
+        // Node points & error whiskers
+        for (let i = 0; i < s.means.length; i++) {
+          const frac = levels.length > 1 ? (levels[i] - minX) / (maxX - minX) : 0.5;
+          const xPx = pa.x + frac * pa.w;
+          const yPx = pa.y + pa.h - (s.means[i] / maxY) * pa.h;
+          const sdVal = s.sds ? s.sds[i] : null;
+
+          // Error whisker
+          if (sdVal !== null && sdVal !== undefined && sdVal > 0) {
+            const errTopY = pa.y + pa.h - Math.min(maxY, s.means[i] + sdVal) / maxY * pa.h;
+            const errBotY = pa.y + pa.h - Math.max(0, s.means[i] - sdVal) / maxY * pa.h;
+            ctx.save();
+            ctx.strokeStyle = s.color;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(xPx, errBotY);
+            ctx.lineTo(xPx, errTopY);
+            ctx.moveTo(xPx - 3, errTopY);
+            ctx.lineTo(xPx + 3, errTopY);
+            ctx.moveTo(xPx - 3, errBotY);
+            ctx.lineTo(xPx + 3, errBotY);
+            ctx.stroke();
+            ctx.restore();
+          }
+
+          // Node circle
+          ctx.save();
+          ctx.fillStyle = s.color;
+          ctx.beginPath();
+          ctx.arc(xPx, yPx, 3.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = C.SURFACE;
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.restore();
+        }
+      });
+
+      _drawLegend(ctx, pa, series.map(s => s.label), series.map(s => s.color));
+      _drawWatermark(ctx, pa, 'EMPIRICAL SPARSITY SWEEP');
+    },
+
+    /**
+     * D3b — Kernel Execution Duration Distribution Chart.
+     * @param {HTMLCanvasElement} canvas
+     * @param {{ trials: { rep: number, clockDur: number, eventDur: number }[], clockStats: { mean: number, sd: number|null }, eventStats: { mean: number, sd: number|null } }} data
+     */
+    renderKernelDurationChart(canvas, data) {
+      const { ctx, w, h } = prepCanvas(canvas);
+      clearCanvas(ctx, w, h);
+      const pa = plotArea(w, h);
+
+      const trials = data.trials || [];
+      if (trials.length === 0) return;
+
+      let maxDur = 0;
+      trials.forEach(t => {
+        maxDur = Math.max(maxDur, t.clockDur || 0, t.eventDur || 0);
+      });
+      maxDur = maxDur * 1.25 || 1;
+
+      // Y Grid
+      const yTicks = 4;
+      ctx.save();
+      ctx.strokeStyle = C.GRID;
+      ctx.lineWidth = 1;
+      ctx.fillStyle = C.TEXT;
+      ctx.font = FONT;
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      for (let i = 0; i <= yTicks; i++) {
+        const val = (maxDur / yTicks) * i;
+        const yPx = pa.y + pa.h - (i / yTicks) * pa.h;
+        ctx.beginPath();
+        ctx.moveTo(pa.x + 0.5, Math.round(yPx) + 0.5);
+        ctx.lineTo(pa.x + pa.w + 0.5, Math.round(yPx) + 0.5);
+        ctx.stroke();
+        ctx.fillText(`${val.toFixed(1)} ms`, pa.x - 4, yPx);
+      }
+      ctx.restore();
+
+      // Plot Trials
+      const n = trials.length;
+      const barW = Math.max(4, Math.min(16, (pa.w / n) * 0.35));
+
+      trials.forEach((t, i) => {
+        const xCenter = pa.x + ((i + 0.5) / n) * pa.w;
+
+        // Clock bar
+        const clH = (t.clockDur / maxDur) * pa.h;
+        ctx.fillStyle = C.BAR_CLOCK;
+        ctx.fillRect(xCenter - barW - 1, pa.y + pa.h - clH, barW, clH);
+
+        // Event bar
+        const evH = (t.eventDur / maxDur) * pa.h;
+        ctx.fillStyle = C.BAR_EVENT;
+        ctx.fillRect(xCenter + 1, pa.y + pa.h - evH, barW, evH);
+
+        // Repetition label
+        ctx.save();
+        ctx.fillStyle = C.TEXT;
+        ctx.font = '8px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        if (n <= 12 || i % Math.ceil(n / 10) === 0) {
+          ctx.fillText(`R${t.rep}`, xCenter, pa.y + pa.h + 4);
+        }
+        ctx.restore();
+      });
+
+      _drawLegend(ctx, pa, ['Time-stepped SNN (ms)', 'Event-driven SNN (ms)'], [C.BAR_CLOCK, C.BAR_EVENT]);
+      _drawWatermark(ctx, pa, 'MEASURED KERNEL TIME (performance.now)');
     },
 
     /**

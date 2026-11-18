@@ -1,6 +1,6 @@
 /**
  * NEUROCORE — Adaptive Event-Driven Neuromorphic Computing Platform
- * Main Frontend Application Controller (v2.1.1)
+ * Main Frontend Application Controller (v2.2.0)
  *
  * Coordinates:
  * - Single-page application navigation & responsive sidebar
@@ -8,7 +8,7 @@
  * - SNN Simulation Engine (LIF neurons, event queue, adaptive policies)
  * - Scientific canvas charts (Membrane potential, Spike raster, Activity)
  * - Active synaptic event queue inspector
- * - Performance Benchmark Lab (Grouped bar, Sparsity curve, Latency proxy, CSV export)
+ * - Empirical Benchmark Lab (Multi-trial statistical benchmarking, paired execution, reproducible CSV/JSON export)
  * - Interactive 5-layer architecture explorer
  */
 
@@ -64,8 +64,12 @@
       initSim3D();
       resizeSimCharts();
     } else if (page === 'benchmarks') {
-      updateBenchmarks();
-      resizeBenchmarkCharts();
+      if (!initialBenchmarkRunDone) {
+        initialBenchmarkRunDone = true;
+        runBenchmarkCampaign();
+      } else {
+        resizeBenchmarkCharts();
+      }
     } else if (page === 'architecture') {
       initArchitectureDiagram();
     }
@@ -845,10 +849,11 @@
   });
 
   // 3D Synaptic Connectivity Modes
-  $$('.mode-pill').forEach(btn => {
+  $$('#simConnModes .mode-pill').forEach(btn => {
     btn.addEventListener('click', (e) => {
       const mode = e.currentTarget.dataset.connMode;
-      $$('.mode-pill').forEach(b => b.classList.toggle('selected', b === e.currentTarget));
+      if (!mode) return;
+      $$('#simConnModes .mode-pill').forEach(b => b.classList.toggle('selected', b === e.currentTarget));
       if (window.NeuroViz && typeof window.NeuroViz.setConnectivityMode === 'function') {
         window.NeuroViz.setConnectivityMode(mode);
         const labels = {
@@ -936,125 +941,486 @@
   });
 
   // ─────────────────────────────────────────────────────────────────────────
-  // BENCHMARK LAB (CANVAS CHARTS & CSV EXPORT)
+  // EXPERIMENTAL BENCHMARK LAB (v2.2.0 EMPIRICAL PLATFORM)
   // ─────────────────────────────────────────────────────────────────────────
 
-  function updateBenchmarks() {
-    const sparsitySlider = $('#benchSparsity');
-    const sparsity = sparsitySlider ? parseInt(sparsitySlider.value, 10) : 70;
-    const workload = 10000;
-    const activeShare = (100 - sparsity) / 100;
-    const eventUpdates = Math.round(workload * activeShare);
-    const reduction = 100 - Math.round((eventUpdates / workload) * 100);
+  let activeExperimentRunner = null;
+  let latestExperimentResult = null;
+  let currentCampaignPreset = 'quick';
+  let initialBenchmarkRunDone = false;
 
-    // Update KPI counters
-    $('#benchSparsityOut').textContent = `${sparsity}%`;
-    $('#benchWorkload').textContent = workload.toLocaleString();
-    $('#benchEventUpdates').textContent = eventUpdates.toLocaleString();
-    $('#benchClockUpdates').textContent = workload.toLocaleString();
-    $('#benchSkipped').textContent = `${reduction}%`;
-    $('#compareEvent').textContent = eventUpdates.toLocaleString();
-    $('#modeledReduction').textContent = `${reduction}% fewer updates`;
-
-    if (!window.NeuroCharts || !window.NeuroCharts.Benchmark) return;
-    const Bench = window.NeuroCharts.Benchmark;
-
-    // 1. Grouped Bar Chart (Neuron Integrations, Synaptic Events, Queue Heap Ops, Lazy Decay Evals)
-    const groupedCanvas = $('#benchGroupedCanvas');
-    if (groupedCanvas) {
-      const eventSynEvents = Math.round(25000 * activeShare * 0.88);
-      const eventQueueOps = eventSynEvents * 2; // Insertion + Removal
-      Bench.renderGroupedBar(groupedCanvas, {
-        groups: [
-          {
-            label: 'Integrations',
-            ann: 10000,
-            clock: 10000,
-            event: eventUpdates,
-          },
-          {
-            label: 'Synaptic Events',
-            ann: 25000,
-            clock: 25000,
-            event: eventSynEvents,
-          },
-          {
-            label: 'Queue Heap Ops',
-            ann: 0,
-            clock: 0,
-            event: eventQueueOps,
-          },
-          {
-            label: 'Lazy Decays',
-            ann: 0,
-            clock: 10000,
-            event: eventUpdates,
-          },
-        ],
-      });
-    }
-
-    // 2. Sparsity Curve Chart (0% to 95%)
-    const sparsityCanvas = $('#benchSparsityCanvas');
-    if (sparsityCanvas) {
-      const levels = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95];
-      const annCurve = levels.map(() => 10000);
-      const clockCurve = levels.map(() => 10000);
-      const eventCurve = levels.map(s => Math.round(10000 * ((100 - s) / 100)));
-
-      Bench.renderSparsityChart(sparsityCanvas, {
-        sparsityLevels: levels,
-        ann: annCurve,
-        clock: clockCurve,
-        event: eventCurve,
-      });
-    }
-
-    // 3. Latency Comparison Chart (Normalized Proxy Cycles)
-    const latencyCanvas = $('#benchLatencyCanvas');
-    if (latencyCanvas) {
-      // Model overhead: event queue overhead ~25 cycles, compute scales with activeShare
-      const eventLatency = Math.round(26 + activeShare * 68);
-      Bench.renderLatencyChart(latencyCanvas, {
-        ann: 100,
-        clock: 92,
-        event: eventLatency,
-      });
-    }
+  // File download helper
+  function downloadBlob(content, filename, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
   }
 
-  function resizeBenchmarkCharts() {
-    updateBenchmarks();
+  // Format Mean ± SD helper
+  function formatMeanSD(stat, unit = '') {
+    if (!stat || stat.mean === null || stat.mean === undefined) return '—';
+    const meanStr = Number(stat.mean).toLocaleString(undefined, {
+      minimumFractionDigits: Number.isInteger(stat.mean) ? 0 : 1,
+      maximumFractionDigits: 1,
+    });
+    const sdVal = stat.sd !== undefined ? stat.sd : stat.sampleStdDev;
+    if (sdVal === null || sdVal === undefined) {
+      return `${meanStr} (N<2)`;
+    }
+    const sdStr = Number(sdVal).toLocaleString(undefined, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    });
+    return `${meanStr} ± ${sdStr}${unit ? ' ' + unit : ''}`;
   }
 
-  $('#benchSparsity')?.addEventListener('input', updateBenchmarks);
-  $('#refreshBench')?.addEventListener('click', () => {
-    updateBenchmarks();
-    toast('Benchmark metrics recalculated.');
-  });
+  // Render complete empirical experiment results to the DOM & Canvas charts
+  function renderExperimentResults(result) {
+    if (!result) return;
+    const summaries = result.summaries || [];
+    const config = result.campaignConfig || {};
 
-  $('#downloadBenchCSV')?.addEventListener('click', () => {
-    if (!window.NeuroCharts || !window.NeuroCharts.Benchmark) return;
-    const sparsitySlider = $('#benchSparsity');
-    const sparsity = sparsitySlider ? parseInt(sparsitySlider.value, 10) : 70;
-    const activeShare = (100 - sparsity) / 100;
-    const eventUpdates = Math.round(10000 * activeShare);
-    const eventSynEvents = Math.round(25000 * activeShare * 0.88);
-    const eventQueueOps = eventSynEvents * 2;
+    // 1. Overview Strip & Parity Audit
+    const idTag = $('#expIdTag');
+    if (idTag) idTag.textContent = result.experimentId;
 
-    const benchmarkData = {
-      groups: [
-        { label: 'Neuron Integrations', ann: 10000, clock: 10000, event: eventUpdates, unit: 'integrations', type: 'Modelled Algorithmic' },
-        { label: 'Synaptic Events', ann: 25000, clock: 25000, event: eventSynEvents, unit: 'events', type: 'Modelled Algorithmic' },
-        { label: 'Queue Heap Operations', ann: 0, clock: 0, event: eventQueueOps, unit: 'push/pop operations', type: 'Modelled Algorithmic' },
-        { label: 'Lazy Decay Evaluations', ann: 0, clock: 10000, event: eventUpdates, unit: 'evaluations', type: 'Modelled Algorithmic' },
-        { label: 'Relative Latency Proxy', ann: 100, clock: 92, event: Math.round(26 + activeShare * 68), unit: 'normalized proxy cycles', type: 'Modelled Proxy' },
-      ],
+    const summaryTitle = $('#expSummaryTitle');
+    if (summaryTitle) {
+      summaryTitle.textContent = `${config.campaignType ? config.campaignType.toUpperCase() : 'EMPIRICAL'} CAMPAIGN: ${result.completedTrialsCount} trials completed across ${config.modes?.join(' & ') || 'modes'}.`;
+    }
+
+    const parityPill = $('#expParityPill');
+    if (parityPill && result.parityVerification) {
+      if (result.parityVerification.allMatched) {
+        parityPill.className = 'eos-pill pass';
+        parityPill.textContent = `PARITY CHECK PASS (${result.parityVerification.parityMatchRate}%)`;
+      } else {
+        parityPill.className = 'eos-pill fail';
+        parityPill.textContent = `PARITY AUDIT: ${result.parityVerification.passedCount}/${result.parityVerification.totalPairedChecked} MATCHED`;
+      }
+    }
+
+    const trialsPill = $('#expTrialsCountPill');
+    if (trialsPill) {
+      trialsPill.textContent = `${result.completedTrialsCount} / ${result.totalTrialsPlanned} TRIALS`;
+    }
+
+    // 2. Locate representative / baseline summaries
+    const getSummary = (metric, mode) => {
+      return summaries.find(s => s.metric === metric && ((s.mode || s.strategy) === mode)) || null;
+    };
+    const eventIntegrations = getSummary('Neuron Integrations', 'event');
+    const clockIntegrations = getSummary('Neuron Integrations', 'clock');
+    const deliveredEvents = getSummary('Delivered Synaptic Events', 'event');
+    const spikeCount = getSummary('Total Spike Count', 'event');
+    const kernelDuration = getSummary('Simulation Kernel Duration', 'event');
+
+    // 3. Populate 6 Empirical KPI Cards
+    if ($('#kpiEventIntegrations')) {
+      $('#kpiEventIntegrations').textContent = formatMeanSD(eventIntegrations);
+      $('#kpiEventIntegrationsSub').textContent = eventIntegrations
+        ? `N=${eventIntegrations.n} trials | Med: ${eventIntegrations.median.toLocaleString()}`
+        : 'Mean ± Sample SD';
+    }
+
+    if ($('#kpiClockIntegrations')) {
+      $('#kpiClockIntegrations').textContent = formatMeanSD(clockIntegrations);
+      $('#kpiClockIntegrationsSub').textContent = clockIntegrations
+        ? `N=${clockIntegrations.n} trials | Med: ${clockIntegrations.median.toLocaleString()}`
+        : 'Mean ± Sample SD';
+    }
+
+    if ($('#kpiReduction')) {
+      if (result.pairedComparisons && result.pairedComparisons.length > 0) {
+        const primaryPair = result.pairedComparisons[0];
+        const redMean = primaryPair.meanIntegrationsReductionPct;
+        const redSD = primaryPair.sdIntegrationsReductionPct;
+        $('#kpiReduction').textContent = redSD !== null && redSD !== undefined
+          ? `${redMean.toFixed(1)}% ± ${redSD.toFixed(1)}%`
+          : `${redMean.toFixed(1)}%`;
+        $('#kpiReductionSub').textContent = `Paired reduction (N=${primaryPair.nPaired} seeds)`;
+      } else {
+        $('#kpiReduction').textContent = '—';
+        $('#kpiReductionSub').textContent = 'Algorithmic compute reduction';
+      }
+    }
+
+    if ($('#kpiDeliveredEvents')) {
+      $('#kpiDeliveredEvents').textContent = formatMeanSD(deliveredEvents);
+      $('#kpiDeliveredEventsSub').textContent = deliveredEvents
+        ? `Min: ${deliveredEvents.min.toLocaleString()} | Max: ${deliveredEvents.max.toLocaleString()}`
+        : 'Mean ± Sample SD';
+    }
+
+    if ($('#kpiSpikeCount')) {
+      $('#kpiSpikeCount').textContent = formatMeanSD(spikeCount);
+      $('#kpiSpikeCountSub').textContent = spikeCount
+        ? `N=${spikeCount.n} trials | Med: ${spikeCount.median.toLocaleString()}`
+        : 'Mean ± Sample SD';
+    }
+
+    if ($('#kpiKernelDuration')) {
+      $('#kpiKernelDuration').textContent = formatMeanSD(kernelDuration, 'ms');
+      $('#kpiKernelDurationSub').textContent = kernelDuration
+        ? `Browser performance.now() | Med: ${kernelDuration.median.toFixed(1)}ms`
+        : 'Measured browser runtime (ms)';
+    }
+
+    // 4. Theoretical Dense ANN Reference Box (Matrix-Vector Multiply baseline)
+    const nNodes = config.neuronCount || 48;
+    const nSteps = config.simulationSteps || 50;
+    const annOps = nNodes * nNodes * nSteps;
+    if ($('#annOpsEstimate')) $('#annOpsEstimate').textContent = `${annOps.toLocaleString()} MACs`;
+    if ($('#annOpsFormula')) $('#annOpsFormula').textContent = `${nNodes} × ${nNodes} × ${nSteps} steps (Dense full matrix multiply)`;
+
+    // 5. Render Canvas Charts via NeuroCharts.Benchmark
+    if (window.NeuroCharts && window.NeuroCharts.Benchmark) {
+      const Bench = window.NeuroCharts.Benchmark;
+
+      // Chart 1: Grouped Bar Chart with Error Bars
+      const groupedCanvas = $('#benchGroupedCanvas');
+      if (groupedCanvas && Bench.renderGroupedBarWithErrors) {
+        const clDelivered = getSummary('Delivered Synaptic Events', 'clock');
+        const clLazy = getSummary('Lazy Decay Evaluations', 'clock');
+        const evLazy = getSummary('Lazy Decay Evaluations', 'event');
+        const evQueue = getSummary('Queue Operations (Push+Pop)', 'event');
+
+        Bench.renderGroupedBarWithErrors(groupedCanvas, {
+          groups: [
+            {
+              label: 'Neuron Integrations',
+              clockMean: clockIntegrations?.mean || 0,
+              clockSD: clockIntegrations?.sd ?? clockIntegrations?.sampleStdDev ?? 0,
+              eventMean: eventIntegrations?.mean || 0,
+              eventSD: eventIntegrations?.sd ?? eventIntegrations?.sampleStdDev ?? 0,
+            },
+            {
+              label: 'Delivered Events',
+              clockMean: clDelivered?.mean || 0,
+              clockSD: clDelivered?.sd ?? clDelivered?.sampleStdDev ?? 0,
+              eventMean: deliveredEvents?.mean || 0,
+              eventSD: deliveredEvents?.sd ?? deliveredEvents?.sampleStdDev ?? 0,
+            },
+            {
+              label: 'Lazy Decays',
+              clockMean: clLazy?.mean || 0,
+              clockSD: clLazy?.sd ?? clLazy?.sampleStdDev ?? 0,
+              eventMean: evLazy?.mean || 0,
+              eventSD: evLazy?.sd ?? evLazy?.sampleStdDev ?? 0,
+            },
+            {
+              label: 'Queue Ops',
+              clockMean: 0,
+              clockSD: 0,
+              eventMean: evQueue?.mean || 0,
+              eventSD: evQueue?.sd ?? evQueue?.sampleStdDev ?? 0,
+            },
+          ],
+        });
+      }
+
+      // Chart 2: Empirical Sparsity Sensitivity Curve
+      const sparsityCanvas = $('#benchSparsityCanvas');
+      if (sparsityCanvas && Bench.renderEmpiricalSparsitySensitivity) {
+        const sparsityGroups = new Map();
+        summaries.filter(s => s.metric === 'Neuron Integrations').forEach(s => {
+          if (!sparsityGroups.has(s.sparsity)) {
+            sparsityGroups.set(s.sparsity, { clock: null, event: null });
+          }
+          const m = s.mode || s.strategy;
+          if (m === 'clock') sparsityGroups.get(s.sparsity).clock = s;
+          if (m === 'event') sparsityGroups.get(s.sparsity).event = s;
+        });
+
+        const sortedSparsities = Array.from(sparsityGroups.keys()).sort((a, b) => a - b);
+        const clockMeans = sortedSparsities.map(sp => sparsityGroups.get(sp).clock?.mean || 0);
+        const clockSDs = sortedSparsities.map(sp => sparsityGroups.get(sp).clock?.sd ?? sparsityGroups.get(sp).clock?.sampleStdDev ?? 0);
+        const eventMeans = sortedSparsities.map(sp => sparsityGroups.get(sp).event?.mean || 0);
+        const eventSDs = sortedSparsities.map(sp => sparsityGroups.get(sp).event?.sd ?? sparsityGroups.get(sp).event?.sampleStdDev ?? 0);
+
+        Bench.renderEmpiricalSparsitySensitivity(sparsityCanvas, {
+          levels: sortedSparsities.length > 0 ? sortedSparsities : [70],
+          clockSeries: { label: 'Time-stepped SNN', means: clockMeans, sds: clockSDs },
+          eventSeries: { label: 'Event-driven SNN', means: eventMeans, sds: eventSDs },
+        });
+      }
+
+      // Chart 3: Measured Kernel Duration Distribution
+      const latencyCanvas = $('#benchLatencyCanvas');
+      if (latencyCanvas && Bench.renderKernelDurationChart) {
+        const eventBySeed = new Map(result.rawTrials.filter(t => t.mode === 'event').map(t => [t.seed, t]));
+        const clockTrials = result.rawTrials.filter(t => t.mode === 'clock');
+        const trialsData = [];
+        clockTrials.forEach((ct, idx) => {
+          const et = eventBySeed.get(ct.seed);
+          if (et) {
+            trialsData.push({
+              index: idx + 1,
+              clockDur: ct.kernelDurationMs,
+              eventDur: et.kernelDurationMs,
+            });
+          }
+        });
+        const clDurSummary = getSummary('Simulation Kernel Duration', 'clock');
+        const evDurSummary = getSummary('Simulation Kernel Duration', 'event');
+
+        Bench.renderKernelDurationChart(latencyCanvas, {
+          trials: trialsData,
+          meanClock: clDurSummary?.mean || 0,
+          meanEvent: evDurSummary?.mean || 0,
+        });
+      }
+    }
+
+    // 6. Populate Empirical Results Table
+    const tbody = $('#expResultsTbody');
+    if (tbody) {
+      tbody.innerHTML = '';
+      summaries.forEach(s => {
+        const tr = document.createElement('tr');
+        const meanFormatted = Number(s.mean).toLocaleString(undefined, {
+          minimumFractionDigits: Number.isInteger(s.mean) ? 0 : 2,
+          maximumFractionDigits: 2,
+        });
+        const sdVal = s.sd !== undefined ? s.sd : s.sampleStdDev;
+        const sdFormatted = sdVal !== null && sdVal !== undefined
+          ? Number(sdVal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          : 'N/A (N<2)';
+        const medFormatted = Number(s.median).toLocaleString(undefined, {
+          minimumFractionDigits: Number.isInteger(s.median) ? 0 : 2,
+          maximumFractionDigits: 2,
+        });
+        const minFormatted = Number(s.min).toLocaleString(undefined, {
+          minimumFractionDigits: Number.isInteger(s.min) ? 0 : 2,
+          maximumFractionDigits: 2,
+        });
+        const maxFormatted = Number(s.max).toLocaleString(undefined, {
+          minimumFractionDigits: Number.isInteger(s.max) ? 0 : 2,
+          maximumFractionDigits: 2,
+        });
+        const strat = s.strategy || s.mode;
+        const stratPill = strat === 'event'
+          ? '<span class="eos-pill" style="padding:2px 6px; font-size:8px;">EVENT</span>'
+          : '<span class="eos-pill dim" style="padding:2px 6px; font-size:8px;">CLOCK</span>';
+
+        tr.innerHTML = `
+          <td><strong>${s.metric}</strong></td>
+          <td>${stratPill}</td>
+          <td class="num">${s.n}</td>
+          <td class="num" style="color: ${strat === 'event' ? 'var(--cyan)' : 'var(--text)'}; font-weight:600;">${meanFormatted}</td>
+          <td class="num" style="color: var(--muted);">${sdFormatted}</td>
+          <td class="num">${medFormatted}</td>
+          <td class="num">${minFormatted}</td>
+          <td class="num">${maxFormatted}</td>
+          <td><small style="color: var(--faint);">${s.unit}</small></td>
+        `;
+        tbody.appendChild(tr);
+      });
+      if ($('#expTableRowsTag')) {
+        $('#expTableRowsTag').textContent = `${summaries.length} METRICS AUDITED`;
+      }
+    }
+
+    // 7. Enable Dataset Export Buttons
+    if ($('#exportRawCSVBtn')) $('#exportRawCSVBtn').disabled = false;
+    if ($('#exportSummaryCSVBtn')) $('#exportSummaryCSVBtn').disabled = false;
+    if ($('#exportCompleteJSONBtn')) $('#exportCompleteJSONBtn').disabled = false;
+  }
+
+  // Execute an empirical campaign
+  async function runBenchmarkCampaign() {
+    if (!window.NeuroExperiment || !window.NeuroExperiment.ExperimentRunner) {
+      toast('Experiment runner module not available.');
+      return;
+    }
+
+    const runBtn = $('#runCampaignBtn');
+    const cancelBtn = $('#cancelCampaignBtn');
+    const statusBadge = $('#benchCampaignStatus');
+    const progressFill = $('#expProgressFill');
+    const progressText = $('#expProgressText');
+    const progressPct = $('#expProgressPct');
+
+    // Collect config
+    const neuronCount = parseInt($('#expNeuronCount')?.value || '48', 10);
+    const sparsity = parseInt($('#expSparsity')?.value || '70', 10);
+    const steps = parseInt($('#expSteps')?.value || '50', 10);
+    const reps = parseInt($('#expReps')?.value || '10', 10);
+    const baseSeed = parseInt($('#expBaseSeed')?.value || '42', 10);
+    const connectionDensity = parseFloat($('#expDensity')?.value || '25') / 100;
+    const firingThreshold = parseFloat($('#expThreshold')?.value || '65') / 100;
+    const adaptiveThreshold = $('#expAdaptiveThresh')?.checked || false;
+    const adaptiveTemporal = $('#expAdaptiveTemporal')?.checked || false;
+
+    const campaignConfig = {
+      campaignType: currentCampaignPreset,
+      neuronCount,
+      sparsity,
+      simulationSteps: steps,
+      repetitions: reps,
+      baseSeed,
+      connectionDensity,
+      firingThreshold,
+      adaptiveThreshold,
+      adaptiveTemporal,
+      modes: ['event', 'clock'],
     };
 
-    window.NeuroCharts.Benchmark.downloadCSV(benchmarkData, `neurocore-benchmark-sparsity-${sparsity}pct.csv`);
-    toast('Benchmark CSV downloaded with complete scientific schema.');
-  });
+    // UI State: Running
+    if (runBtn) runBtn.disabled = true;
+    if (cancelBtn) cancelBtn.disabled = false;
+    if (statusBadge) statusBadge.innerHTML = '<span class="pulse-dot" style="background:var(--cyan)"></span> RUNNING EMPIRICAL CAMPAIGN';
+    if (progressFill) progressFill.style.width = '0%';
+    if (progressPct) progressPct.textContent = '0%';
+    if (progressText) progressText.textContent = 'Initializing isolated simulation instances...';
+
+    activeExperimentRunner = new window.NeuroExperiment.ExperimentRunner(window.SimulationEngine, window.SeededPRNG);
+
+    try {
+      const result = await activeExperimentRunner.runCampaign(campaignConfig, {
+        onProgress: (p) => {
+          const pct = p.progressPct ?? p.percent ?? 0;
+          if (progressFill) progressFill.style.width = `${pct}%`;
+          if (progressPct) progressPct.textContent = `${pct}%`;
+          if (progressText) {
+            const m = (p.mode || p.currentMode || 'snn').toUpperCase();
+            const cur = p.completedTrials ?? p.trialIndex ?? 0;
+            const tot = p.totalTrials ?? 0;
+            const seed = p.trialSeed !== undefined ? `Seed ${p.trialSeed}` : '';
+            progressText.textContent = p.statusText || `Trial ${cur}/${tot}: ${m} mode (${seed})...`;
+          }
+        },
+      });
+
+      latestExperimentResult = result;
+      renderExperimentResults(result);
+
+      if (progressFill) progressFill.style.width = '100%';
+      if (progressPct) progressPct.textContent = '100%';
+      if (progressText) {
+        progressText.textContent = result.status === 'cancelled'
+          ? `Campaign cancelled after ${result.completedTrialsCount} trials.`
+          : `Campaign completed: ${result.completedTrialsCount} trials executed.`;
+      }
+      if (statusBadge) {
+        statusBadge.innerHTML = result.status === 'cancelled'
+          ? '<span class="pulse-dot" style="background:#EF4444"></span> RUN CANCELLED'
+          : '<span class="pulse-dot"></span> BENCHMARK READY';
+      }
+
+      toast(result.status === 'cancelled'
+        ? `Campaign cancelled after ${result.completedTrialsCount} trials.`
+        : `Completed ${result.completedTrialsCount} empirical trials with full statistical audit.`);
+    } catch (err) {
+      console.error('Experiment campaign error:', err);
+      toast(`Experiment run failed: ${err.message}`);
+      if (statusBadge) statusBadge.innerHTML = '<span class="pulse-dot" style="background:#EF4444"></span> RUN ERROR';
+    } finally {
+      if (runBtn) runBtn.disabled = false;
+      if (cancelBtn) cancelBtn.disabled = true;
+      activeExperimentRunner = null;
+    }
+  }
+
+  // Cancel active campaign
+  function cancelBenchmarkCampaign() {
+    if (activeExperimentRunner) {
+      activeExperimentRunner.cancel();
+      const cancelBtn = $('#cancelCampaignBtn');
+      if (cancelBtn) cancelBtn.disabled = true;
+      const progressText = $('#expProgressText');
+      if (progressText) progressText.textContent = 'Cancelling experiment run...';
+    }
+  }
+
+  // Resize charts hook
+  function resizeBenchmarkCharts() {
+    if (latestExperimentResult) {
+      renderExperimentResults(latestExperimentResult);
+    }
+  }
+
+  // Wire Benchmark Event Listeners
+  function initBenchmarkEventListeners() {
+    // Campaign Preset Pills
+    $$('#expCampaignPreset .mode-pill').forEach(btn => {
+      btn.addEventListener('click', () => {
+        $$('#expCampaignPreset .mode-pill').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        currentCampaignPreset = btn.dataset.preset;
+
+        // Preset adjustments
+        if (currentCampaignPreset === 'quick') {
+          if ($('#expNeuronCount')) $('#expNeuronCount').value = '48';
+          if ($('#expSparsity')) $('#expSparsity').value = '70';
+          if ($('#expSteps')) $('#expSteps').value = '50';
+          if ($('#expReps')) $('#expReps').value = '10';
+          toast('Selected Campaign: Quick (10 Paired Reps)');
+        } else if (currentCampaignPreset === 'sparsity_sweep') {
+          if ($('#expReps')) $('#expReps').value = '5';
+          toast('Selected Campaign: Sparsity Sweep (50%–95%)');
+        } else if (currentCampaignPreset === 'scale_sweep') {
+          if ($('#expReps')) $('#expReps').value = '5';
+          toast('Selected Campaign: Scaling Sweep (24–96 Nodes)');
+        } else if (currentCampaignPreset === 'custom') {
+          toast('Selected Campaign: Custom Experiment');
+        }
+      });
+    });
+
+    // Randomize seed button
+    $('#expRandomSeedBtn')?.addEventListener('click', () => {
+      const randSeed = Math.floor(Math.random() * 900000) + 10000;
+      const seedInput = $('#expBaseSeed');
+      if (seedInput) seedInput.value = randSeed;
+    });
+
+    // Range input value updates
+    $('#expDensity')?.addEventListener('input', (e) => {
+      const out = $('#expDensityOut');
+      if (out) out.textContent = (parseFloat(e.target.value) / 100).toFixed(2);
+    });
+    $('#expThreshold')?.addEventListener('input', (e) => {
+      const out = $('#expThresholdOut');
+      if (out) out.textContent = (parseFloat(e.target.value) / 100).toFixed(2);
+    });
+
+    // Run & Cancel buttons
+    $('#runCampaignBtn')?.addEventListener('click', runBenchmarkCampaign);
+    $('#cancelCampaignBtn')?.addEventListener('click', cancelBenchmarkCampaign);
+
+    // Export Buttons
+    $('#exportRawCSVBtn')?.addEventListener('click', () => {
+      if (!latestExperimentResult || !window.NeuroExperiment?.generateRawCSV) return;
+      const csv = window.NeuroExperiment.generateRawCSV(latestExperimentResult);
+      downloadBlob(csv, `neurocore-experiment-${latestExperimentResult.experimentId}-raw-trials.csv`, 'text/csv;charset=utf-8;');
+      toast('Raw trial dataset exported.');
+    });
+
+    $('#exportSummaryCSVBtn')?.addEventListener('click', () => {
+      if (!latestExperimentResult || !window.NeuroExperiment?.generateSummaryCSV) return;
+      const csv = window.NeuroExperiment.generateSummaryCSV(latestExperimentResult);
+      downloadBlob(csv, `neurocore-experiment-${latestExperimentResult.experimentId}-summary-stats.csv`, 'text/csv;charset=utf-8;');
+      toast('Statistical summary dataset exported.');
+    });
+
+    $('#exportCompleteJSONBtn')?.addEventListener('click', () => {
+      if (!latestExperimentResult || !window.NeuroExperiment?.generateExperimentJSON) return;
+      const json = window.NeuroExperiment.generateExperimentJSON(latestExperimentResult);
+      downloadBlob(json, `neurocore-experiment-${latestExperimentResult.experimentId}-complete.json`, 'application/json;charset=utf-8;');
+      toast('Complete portable experiment JSON exported.');
+    });
+  }
+
+  initBenchmarkEventListeners();
 
   // ─────────────────────────────────────────────────────────────────────────
   // INTERACTIVE ARCHITECTURE DIAGRAM
@@ -1085,7 +1451,6 @@
   document.addEventListener('DOMContentLoaded', () => {
     syncControlOutputs();
     initSimulation();
-    updateBenchmarks();
 
     // Check URL hash for direct routing
     const hash = window.location.hash ? window.location.hash.slice(1) : 'overview';
@@ -1100,7 +1465,6 @@
   if (document.readyState === 'complete' || document.readyState === 'interactive') {
     syncControlOutputs();
     initSimulation();
-    updateBenchmarks();
     const hash = window.location.hash ? window.location.hash.slice(1) : 'overview';
     if (pageNames[hash]) {
       navigate(hash);

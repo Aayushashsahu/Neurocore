@@ -1,6 +1,6 @@
 # NEUROCORE — Adaptive Event-Driven Neuromorphic Computing Platform
 
-**Version:** v2.1.1  
+**Version:** v2.2.0  
 **Status:** Interactive Research Platform Prototype  
 **Live Deployment:** [https://neurocore-gilt.vercel.app/](https://neurocore-gilt.vercel.app/)  
 **Deployment Platform:** Vercel (Static Web Application)
@@ -8,6 +8,52 @@
 NEUROCORE is an interactive scientific computing and visualization platform for exploring event-driven Spiking Neural Networks (SNNs), adaptive neuromorphic computation policies, and hardware-aware edge profiling.
 
 > *"Intelligence that computes only when it matters."*
+
+---
+
+## What's New in v2.2.0 — Experimental Results Dashboard & Statistical Benchmarking
+
+### 1. Genuine Multi-Trial Empirical Benchmarking (`experiment-runner.js`)
+- **Automated Experiment Campaign Orchestration:** Completely replaced illustrative estimates with live multi-trial execution using isolated instances of the deterministic Leaky Integrate-and-Fire simulation engine.
+- **Deterministic PRNG Hash Sequences:** Uses independent, mathematically derived seed sequences (`deriveTrialSeed(baseSeed, repIndex)`) via Mulberry32 so that every trial is fully deterministic and reproducible.
+- **Non-Blocking Asynchronous Chunking:** Executes multi-run campaigns asynchronously yielding execution slices back to the browser event loop (`setTimeout(..., 0)`), ensuring 60fps UI responsiveness during 20–60 trial batches.
+- **Responsive Cancellation:** Real-time cooperative cancellation support allows users to halt active campaigns immediately while retaining all completed trial records.
+
+### 2. Rigorous Sample Statistics ($n-1$ Denominator)
+- **Unbiased Sample Standard Deviation:** Computes sample standard deviation with Bessel's correction:
+  $$s = \sqrt{\frac{1}{n-1} \sum_{i=1}^n (x_i - \bar{x})^2}$$
+  Guarantees strict mathematical handling of edge cases, returning `null` / `N/A` when sample size $N < 2$.
+- **Complete Descriptive Statistics:** Computes Sample Size ($N$), Mean ($\bar{x}$), Sample SD ($s$), Median, Minimum, and Maximum for 13+ empirical metrics including neuron integrations, lazy decay evaluations, scheduled synaptic events, delivered synaptic events, spike counts, queue operations, and measured kernel runtimes.
+- **Formatted Results:** Standardized notation across all KPI cards, tables, and tooltips as `Mean ± SD`.
+
+### 3. Paired Execution Analysis & Compute Reduction
+- **Paired Trials on Identical Seeds:** For each repetition, evaluates Time-Stepped SNN and Event-Driven SNN on the exact same topology and stochastic input sequence.
+- **Paired Difference Analysis:** Computes paired differences ($\Delta x_i = x_{\text{clock}, i} - x_{\text{event}, i}$) and calculates the true mean percentage reduction:
+  $$\text{Reduction} = \frac{1}{n} \sum_{i=1}^n \left( \frac{x_{\text{clock}, i} - x_{\text{event}, i}}{x_{\text{clock}, i}} \right) \times 100\% \pm s_{\text{paired}}$$
+- **Scientific Parity Audit:** Every paired repetition automatically verifies 100% mathematical equality between Time-stepped and Event-driven modes for spike counts, delivered synaptic events, and spike raster timing.
+
+### 4. Interactive Campaign Presets
+- **Quick (10 Paired Reps):** 20 total simulation runs (10 clock, 10 event) at 48 neurons, 70% input sparsity, and 50 steps for instant interactive benchmarking (~80–120ms total).
+- **Sparsity Sweep (50%–95%):** Automated multi-point sensitivity analysis across 50%, 70%, 80%, 90%, and 95% input sparsity levels.
+- **Scaling Sweep (24–96 Nodes):** Multi-scale network evaluation across 24, 48, 72, and 96 neurons to observe algorithmic overhead scaling.
+- **Custom Experiment:** Full control over network size, sparsity, simulation steps, repetition count (5 to 30), base seed, synaptic density, firing threshold, and adaptive policies.
+
+### 5. Upgraded Scientific Visualizations (`charts.js`)
+- **Empirical Grouped Bar Chart with Error Whiskers:** Visualizes computational activity (Neuron Integrations, Delivered Events, Lazy Decays, Queue Operations) comparing Time-stepped and Event-driven SNNs with precise $\pm \text{SD}$ whiskers.
+- **Empirical Sparsity Sensitivity Curve:** Plots measured neuron integration scaling across sparsity levels with node circles and error bounds.
+- **Simulation Kernel Runtime Distribution:** Displays measured per-trial browser kernel execution duration (`performance.now()`) with mean lines.
+
+### 6. Strict Separation of Dense ANN Analytical Baseline
+- **Analytical Matrix-Vector Multiply:** Dense feedforward ANN workloads ($N_{\text{inputs}} \times N_{\text{outputs}} \times T_{\text{steps}}$) are strictly isolated in a dedicated Theoretical Reference box. They are never simulated by the LIF kernel, preventing any confusion between empirical SNN measurements and theoretical arithmetic baselines.
+
+### 7. Reproducible Dataset Exporters
+- **Raw Trials CSV:** Full trial-by-trial record with timestamp, seed, repetition index, execution mode, network parameters, and all 13+ measured counters.
+- **Statistical Summary CSV:** Aggregated summary table formatted with metric, strategy, $N$, Mean, Sample SD, Median, Min, Max, and units.
+- **Complete Portable JSON:** Clean JSON export free of non-serializable Proxies or internal pointers for reproducible offline Python/R analysis.
+
+### 8. Automated Test Suite (`test-experiments.js`)
+- **38 Automated Tests:** Covers statistical calculations ($n-1$ SD, $N<2$ null check, median), deterministic seed derivation, single-trial execution, paired parity verification, multi-trial campaign execution, cancellation behavior, and CSV/JSON formatting.
+- **Run Locally:** Execute `node test-experiments.js` alongside `node test-simulation.js`.
 
 ---
 
@@ -111,9 +157,12 @@ neurocore-platform/
 ├── styles.css                   # Futuristic dark scientific interface stylesheet
 ├── app.js                       # Primary application controller & event coordinator
 ├── simulation-engine.js         # Modular Leaky Integrate-and-Fire SNN engine
+├── experiment-runner.js         # Multi-trial empirical experiment runner & statistics
 ├── charts.js                    # Scientific HTML5 canvas charts (zero external dependencies)
 ├── three-viz.js                 # Three.js 3D neural network visualizers (ES module)
 ├── architecture-interactive.js  # Interactive 5-layer architecture diagram module
+├── test-simulation.js           # Automated validation test suite for SNN engine (41 tests)
+├── test-experiments.js          # Automated validation test suite for experiment runner (38 tests)
 ├── start-neurocore.bat          # Windows one-click local server launcher
 └── README.md                    # Platform documentation
 ```
