@@ -1,0 +1,17 @@
+NEUROCORE — QUICK START
+
+1. Extract neurocore-platform.zip.
+2. Open the extracted neurocore-platform folder.
+3. On Windows, double-click start-neurocore.bat.
+4. Your browser should open http://localhost:8000.
+
+Alternative: double-click index.html to open the static demo directly.
+
+For your presentation:
+- Start on Overview.
+- Open Simulation lab and click Run simulation.
+- Change sparsity and execution mode to demonstrate the interaction.
+- Open Benchmark lab and adjust the sparsity slider.
+- Finish with Architecture and Hardware to explain what is implemented and what is planned.
+
+Remember: the browser simulation and benchmark counters are illustrative prototypes, not measured hardware results.
