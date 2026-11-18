@@ -1,5 +1,5 @@
 /**
- * NEUROCORE Three.js 3D Neural Network Visualization (v2.0.0)
+ * NEUROCORE Three.js 3D Neural Network Visualization (v2.1.1)
  * 
  * Provides unified, organic 3D neuromorphic network visualizations for:
  * 1. Hero section: Organized cortical clusters with intentional synaptic pathways

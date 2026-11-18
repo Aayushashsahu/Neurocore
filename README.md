@@ -1,6 +1,6 @@
 # NEUROCORE — Adaptive Event-Driven Neuromorphic Computing Platform
 
-**Version:** v2.1.0  
+**Version:** v2.1.1  
 **Status:** Interactive Research Platform Prototype  
 **Live Deployment:** [https://neurocore-gilt.vercel.app/](https://neurocore-gilt.vercel.app/)  
 **Deployment Platform:** Vercel (Static Web Application)
@@ -11,32 +11,39 @@ NEUROCORE is an interactive scientific computing and visualization platform for 
 
 ---
 
-## What's New in v2.1.0
+## What's New in v2.1.1
 
-### 1. Synchronized SNN Topology & Directed Spike Propagation
-- **Dynamic Neuron Scaling:** The 3D Simulation Lab visualizer and 2D Neural Activity Map dynamically rebuild to match the actual simulation engine's neuron count ($12$ to $96$ nodes).
-- **Actual Synaptic Graph:** The 3D and 2D visualizations are constructed directly from `SimulationEngine.connections`, reflecting actual directed pre-to-post synaptic connections, weights, and delays.
-- **Strict Directed Spike Propagation:** Spiking pulses travel strictly from pre-synaptic to post-synaptic neurons along actual directed outgoing connections, correctly triggering post-synaptic potentials only upon delivery.
-- **Topology Rebuilding on Configuration Change:** Seamlessly reconstructs when changing network size, preset, or experiment seed.
+### 1. Genuine Sparse Event-Driven Runtime ($O(K)$ Active-Neuron Scheduler)
+- **Active-Neuron Scheduling:** Replaced full $O(N)$ per-timestep network scanning with an active-neuron scheduler that processes strictly neurons receiving delivered synaptic events or external inputs ($K \ll N$).
+- **Geometric Skip-Sampling for Bernoulli Inputs:** External stochastic inputs are generated using closed-form geometric skip sampling ($k = \lfloor \ln(U) / \ln(1 - p) \rfloor$) driven by the Mulberry32 PRNG. This samples external inputs in $O(M)$ steps without scanning idle neurons, handling both 0% and 100% sparsity extremes deterministically.
+- **Lazy Membrane Potential Decay:** Idle neurons do not compute step-by-step decay. Instead, membrane potential is lazily evaluated on-demand upon incoming event arrival or user inspection using exact exponential decay:
+  $$V(t) = V_{\text{last}} \cdot \lambda^{\Delta t}$$
+  Refractory boundary tracking ensures exact mathematical equivalence with continuous time-stepped simulation ($< 10^{-12}$ delta).
+- **Sparse Event Trace with On-Demand Reconstruction:** Replaced dense $O(N \times T)$ potential histories with lightweight sparse event traces (`updateEvents`), reconstructing continuous membrane trajectories on-demand for inspected neurons without memory bloat.
+- **Dual-Mode Parity:** Both time-stepped (`clock`) and event-driven (`event`) execution modes generate mathematically identical spike rasters and total delivered synaptic events.
 
-### 2. Scientifically Grounded Metric Accounting
-- **Actual Event Counters:** Replaced arbitrary synaptic event estimates with exact `scheduledEvents` and `deliveredEvents` counters tracked directly by the event queue.
-- **Precise Dimension & Unit Labels:** Replaced misleading "Hz" and physical millisecond tags with discrete simulation interval metrics: `spikes/step`, `Step {N} (T+{N}.0 ms)`, and distinct tracking of neuron state updates versus total synaptic operations.
-- **Queue State Transparency:** Distinguishes pending events currently buffered in the heap from cumulative delivered synaptic events.
+### 2. Scientific Metric Integrity & Conservation Invariant
+- **9 Distinct Metric Counters:** Tracks exact computational components: `neuronIntegrations`, `lazyDecayEvaluations`, `externalInputEvents`, `scheduledEvents`, `deliveredEvents`, `pendingEvents`, `queueInsertions`, `queueRemovals`, and measured browser `executionDurationMs`.
+- **Conservation Invariant:** Enforces the strict conservation equality after every single simulation step:
+  $$\text{Scheduled Events} = \text{Delivered Events} + \text{Pending Events}$$
+  Backed by matching queue insertions and removals ($\text{Insertions} = \text{Scheduled}$, $\text{Removals} = \text{Delivered}$).
+- **Honest Attribution:** Algorithmic operation counts (integrations, heap ops, events) are strictly distinguished from measured browser execution duration (`performance.now()`). Hardware energy and power metrics are explicitly marked as modeled proxies.
 
-### 3. Dynamic Adaptive Threshold ($V_{th}(t)$) Tracking
-- **Adaptive Threshold Visualization:** The Membrane Potential chart dynamically plots the evolving adaptive threshold trajectory curve $V_{th}(t)$ across time steps when adaptive thresholding is active, while maintaining clean horizontal threshold lines in static mode.
-- **Interactive Neuron Inspection:** Real-time state extraction per inspected neuron with historical potential and threshold tracking.
+### 3. Discrete Simulation Step Conventions & Normalized Units
+- **Time Convention:** Replaced speculative physical millisecond labels ("T+N.0 ms") with discrete simulation step indices (`Step 000`, `Step 001`, `Step 002`).
+- **Activity Units:** Standardized population activity metrics as `spikes/step` rather than continuous-time Hz.
+- **Membrane Potential:** Formatted in normalized voltage units ($[0.0, 1.2]$).
 
-### 4. Deterministic Reproducibility & Seeded PRNG
-- **Mulberry32 PRNG:** Deterministic 32-bit seeded pseudo-random number generator driving both network connectivity generation and stochastic input sequences.
-- **Seed Control:** User-selectable experiment seed with hexadecimal hash display and one-click randomizer. Identical seeds generate identical network topologies and spike patterns across runs.
-- **JSON Experiment Export:** One-click download of complete experiment configurations and runtime metadata as JSON (`neurocore-experiment-seed-{seed}-steps-{steps}.json`), separate from benchmark CSV files.
+### 4. Adaptive Threshold ($V_{th}(t)$) Trajectory Visualization
+- **Dynamic Threshold Tracking:** The Membrane Potential chart dynamically plots the evolving adaptive threshold curve $V_{th}(t)$ across time steps for the inspected neuron when adaptive thresholding is enabled, and a fixed horizontal reference line in static mode.
 
-### 5. Workstation Reliability & Responsive Observability
-- **Dynamic Status Lifecycle:** Real-time runtime indicator tracking `SNN IDLE`, `SNN RUNNING`, `SNN PAUSED`, and `SNN COMPLETED` states.
-- **Native Canvas Resizing:** Integrated `ResizeObserver` lifecycle management across all chart viewports for crisp rendering on high-DPI displays.
-- **Safe Module Fallbacks:** Graceful degraded mode if WebGL or modules are constrained.
+### 5. Resilient Canvas Lifecycle Management (`ChartResizeController`)
+- **Unified Resize Controller:** Replaced fragmented resize listeners with a unified `ChartResizeController` using `ResizeObserver` across all four scientific canvas viewports (`MembranePotentialChart`, `RasterPlotChart`, `SpikeActivityChart`, `NeuralActivityMap`).
+- **Collapsed Dimension Guards & Debouncing:** Debounced via `requestAnimationFrame` with guards against collapsed parent containers during tab switching or backgrounding, plus full teardown on chart destroy.
+
+### 6. Automated Validation Test Suite (`test-simulation.js`)
+- **Automated Verification:** 41 comprehensive automated tests across 5 test suites (`Suite A`: LIF Neuron Model Correctness, `Suite B`: Sparse Scheduler & Geometric Sampler, `Suite C`: Mode Equivalence, `Suite D`: Conservation Invariants, `Suite E`: Deterministic Reproducibility).
+- **Run Locally:** Execute `node test-simulation.js` for instant regression testing.
 
 ---
 

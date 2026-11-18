@@ -29,18 +29,74 @@
   // ───────────────────── Shared helpers ──────────────────────
 
   /**
+   * Reusable ResizeObserver manager that prevents observer loops,
+   * handles initially hidden parent containers, and debounces with requestAnimationFrame.
+   */
+  class ChartResizeController {
+    /**
+     * @param {HTMLCanvasElement} canvas
+     * @param {function(): void} onResize
+     */
+    constructor(canvas, onResize) {
+      this._canvas = canvas;
+      this._onResize = onResize;
+      this._observer = null;
+      this._lastW = 0;
+      this._lastH = 0;
+      this._rafId = null;
+
+      if (typeof window !== 'undefined' && window.ResizeObserver && canvas) {
+        const target = canvas.parentElement || canvas;
+        this._observer = new ResizeObserver((entries) => {
+          for (const entry of entries) {
+            const cr = entry.contentRect;
+            const w = Math.round(cr.width);
+            const h = Math.round(cr.height);
+            // Skip initially collapsed or hidden layout (display: none / 0px)
+            if (w <= 0 || h <= 0) continue;
+            // Skip redundant redraws if dimensions haven't changed
+            if (w === this._lastW && h === this._lastH) continue;
+            this._lastW = w;
+            this._lastH = h;
+            if (this._rafId) cancelAnimationFrame(this._rafId);
+            this._rafId = requestAnimationFrame(() => {
+              this._onResize();
+            });
+          }
+        });
+        this._observer.observe(target);
+      }
+    }
+
+    /** Disconnect observer and cancel pending animation frames to prevent leaks. */
+    disconnect() {
+      if (this._rafId) cancelAnimationFrame(this._rafId);
+      if (this._observer) {
+        this._observer.disconnect();
+        this._observer = null;
+      }
+    }
+  }
+
+  /**
    * Configure a canvas for HiDPI rendering and return the drawing area.
+   * Handles collapsed parent dimensions gracefully.
    * @param {HTMLCanvasElement} canvas
    * @returns {{ ctx: CanvasRenderingContext2D, w: number, h: number, dpr: number }}
    */
   function prepCanvas(canvas) {
     const rect = canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width  = rect.width  * dpr;
-    canvas.height = rect.height * dpr;
+    const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+    const parent = canvas.parentElement;
+    const w = rect.width > 0 ? rect.width : (parent && parent.clientWidth > 0 ? parent.clientWidth : 300);
+    const h = rect.height > 0 ? rect.height : (parent && parent.clientHeight > 0 ? parent.clientHeight : 150);
+    const safeW = Math.max(10, Math.round(w));
+    const safeH = Math.max(10, Math.round(h));
+    canvas.width  = Math.round(safeW * dpr);
+    canvas.height = Math.round(safeH * dpr);
     const ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
-    return { ctx, w: rect.width, h: rect.height, dpr };
+    return { ctx, w: safeW, h: safeH, dpr };
   }
 
   /** Plot area rectangle (CSS-px). */
@@ -121,6 +177,7 @@
     #w = 0;
     #h = 0;
     #neuronId = 0;
+    #resizeController = null;
 
     // cached data
     #potentials        = [];
@@ -140,6 +197,13 @@
       this.#canvas = canvasElement;
       this.windowSize = options.windowSize ?? WINDOW_SIZE;
       this.resize();
+      this.#resizeController = new ChartResizeController(this.#canvas, () => this.resize());
+    }
+
+    /** Clean up observer listeners and animation loops. */
+    destroy() {
+      this.#resizeController?.disconnect();
+      this.#resizeController = null;
     }
 
     /** Resize canvas to match its CSS dimensions. */
@@ -317,6 +381,7 @@
     #ctx;
     #w = 0;
     #h = 0;
+    #resizeController = null;
 
     #spikeRaster  = new Map();
     #neuronCount  = 0;
@@ -331,6 +396,13 @@
       this.#canvas = canvasElement;
       this.windowSize = options.windowSize ?? WINDOW_SIZE;
       this.resize();
+      this.#resizeController = new ChartResizeController(this.#canvas, () => this.resize());
+    }
+
+    /** Clean up observer listeners. */
+    destroy() {
+      this.#resizeController?.disconnect();
+      this.#resizeController = null;
     }
 
     /** Resize and redraw. */
@@ -426,6 +498,7 @@
     #ctx;
     #w = 0;
     #h = 0;
+    #resizeController = null;
 
     #spikeFrequency = [];
     #totalSpikes    = 0;
@@ -442,6 +515,13 @@
       this.#canvas = canvasElement;
       this.windowSize = options.windowSize ?? WINDOW_SIZE;
       this.resize();
+      this.#resizeController = new ChartResizeController(this.#canvas, () => this.resize());
+    }
+
+    /** Clean up observer listeners. */
+    destroy() {
+      this.#resizeController?.disconnect();
+      this.#resizeController = null;
     }
 
     /** Resize and redraw. */
@@ -809,9 +889,11 @@
       let csv = '';
 
       if (Array.isArray(data.groups)) {
-        csv = 'Metric,Dense ANN,Time-stepped SNN,Event-driven SNN\n';
+        csv = 'Metric,Dense ANN,Time-stepped SNN,Event-driven SNN,Unit,Measurement Type\n';
         for (const g of data.groups) {
-          csv += `${_escCSV(g.label)},${g.ann},${g.clock},${g.event}\n`;
+          const unit = g.unit || 'evaluations';
+          const type = g.type || 'Modelled Algorithmic';
+          csv += `${_escCSV(g.label)},${g.ann},${g.clock},${g.event},${_escCSV(unit)},${_escCSV(type)}\n`;
         }
       } else {
         // generic key-value
@@ -898,7 +980,7 @@
     #spiked = [];
     #active = [];
     #potentials = [];
-    #resizeObserver = null;
+    #resizeController = null;
 
     /**
      * @param {HTMLCanvasElement} canvasElement
@@ -906,10 +988,13 @@
     constructor(canvasElement) {
       this.#canvas = canvasElement;
       this.resize();
-      if (window.ResizeObserver && this.#canvas.parentElement) {
-        this.#resizeObserver = new ResizeObserver(() => this.resize());
-        this.#resizeObserver.observe(this.#canvas.parentElement);
-      }
+      this.#resizeController = new ChartResizeController(this.#canvas, () => this.resize());
+    }
+
+    /** Clean up observer listeners. */
+    destroy() {
+      this.#resizeController?.disconnect();
+      this.#resizeController = null;
     }
 
     resize() {

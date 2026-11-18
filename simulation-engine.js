@@ -6,7 +6,7 @@
  * modes, adaptive threshold policies, and adaptive temporal binning.
  * 
  * @file simulation-engine.js
- * @version 2.0.0
+ * @version 2.1.1
  * @license MIT
  */
 
@@ -96,10 +96,16 @@ class LIFNeuron {
     this.leakFactor = opts.leakFactor ?? 0.78;
     /** @type {number} */
     this.refractoryPeriod = opts.refractoryPeriod ?? 2;
-    /** @type {number} Remaining refractory timesteps. */
+    /** @type {number} Remaining refractory timesteps (for discrete clock mode). */
     this.refractoryTimer = 0;
+    /** @type {number} Step index until which the neuron is refractory (for lazy mode). */
+    this.refractoryUntil = -1;
+    /** @type {number} Last timestep when membrane potential was calculated. */
+    this.lastUpdateStep = 0;
 
-    /** @type {number[]} Full membrane-potential history. */
+    /** @type {Array<{step: number, input: number, potential: number, spiked: boolean}>} Sparse event trace. */
+    this.updateEvents = [{ step: 0, input: 0, potential: 0.0, spiked: false }];
+    /** @type {number[]} Full membrane-potential history (populated in clock mode or on demand). */
     this.potentialHistory = [];
     /** @type {number[]} Timesteps at which the neuron spiked. */
     this.spikeTimes = [];
@@ -108,18 +114,98 @@ class LIFNeuron {
   }
 
   /**
-   * Advance the neuron by one timestep.
+   * Lazily decay membrane potential up to `currentStep` using exponential decay
+   * and refractory boundary enforcement.
+   *
+   * Formula: V(t) = V(last) * leakFactor^(t - lastUpdate)
+   *
+   * @param {number} currentStep
+   * @returns {number} Decayed membrane potential
+   */
+  lazyDecay(currentStep) {
+    if (this.lastUpdateStep >= currentStep) {
+      return this.membranePotential;
+    }
+
+    // 1. If currently inside refractory period
+    if (currentStep <= this.refractoryUntil) {
+      this.membranePotential = this.resetVoltage;
+      this.lastUpdateStep = currentStep;
+      return this.membranePotential;
+    }
+
+    // 2. If refractory period ended between lastUpdateStep and currentStep
+    if (this.lastUpdateStep <= this.refractoryUntil) {
+      const elapsed = currentStep - this.refractoryUntil;
+      this.membranePotential = this.resetVoltage * Math.pow(this.leakFactor, elapsed);
+    } else {
+      // 3. Normal exponential decay from previous subthreshold potential
+      const elapsed = currentStep - this.lastUpdateStep;
+      this.membranePotential = this.membranePotential * Math.pow(this.leakFactor, elapsed);
+    }
+
+    this.lastUpdateStep = currentStep;
+    return this.membranePotential;
+  }
+
+  /**
+   * Integrate synaptic/external input for the current step and evaluate firing.
+   * Used by the event-driven active-neuron scheduler.
+   *
+   * @param {number} input       Total incoming current at current step.
+   * @param {number} currentStep Current simulation timestep.
+   * @returns {boolean} `true` if the neuron fired.
+   */
+  integrateAndFire(input, currentStep) {
+    this.lastUpdateStep = currentStep;
+
+    // Guard against input during refractory period
+    if (currentStep <= this.refractoryUntil) {
+      this.membranePotential = this.resetVoltage;
+      this.updateEvents.push({ step: currentStep, input, potential: this.membranePotential, spiked: false });
+      return false;
+    }
+
+    // Integrate incoming current
+    this.membranePotential += input;
+
+    // Normalized upper bound ceiling
+    if (this.membranePotential > 1.2) {
+      this.membranePotential = 1.2;
+    }
+
+    // Threshold evaluation
+    const spiked = this.membranePotential >= this.threshold;
+    if (spiked) {
+      this.spikeCount++;
+      if (currentStep !== undefined) this.spikeTimes.push(currentStep);
+      this.membranePotential = this.resetVoltage;
+      this.refractoryUntil = currentStep + this.refractoryPeriod;
+      this.refractoryTimer = this.refractoryPeriod;
+    }
+
+    this.updateEvents.push({ step: currentStep, input, potential: this.membranePotential, spiked });
+    return spiked;
+  }
+
+  /**
+   * Advance the neuron by one timestep in discrete time-stepped mode.
    *
    * @param {number} input  Total weighted synaptic input for this step.
    * @param {number} [step] Current simulation timestep (for spike recording).
    * @returns {boolean} `true` if the neuron fired.
    */
   update(input, step) {
+    if (step !== undefined) this.lastUpdateStep = step;
+
     // Refractory guard
     if (this.refractoryTimer > 0) {
       this.refractoryTimer--;
       this.membranePotential = this.resetVoltage;
       this.potentialHistory.push(this.membranePotential);
+      if (step !== undefined) {
+        this.updateEvents.push({ step, input, potential: this.membranePotential, spiked: false });
+      }
       return false;
     }
 
@@ -135,12 +221,18 @@ class LIFNeuron {
     const spiked = this.membranePotential >= this.threshold;
     if (spiked) {
       this.spikeCount++;
-      if (step !== undefined) this.spikeTimes.push(step);
+      if (step !== undefined) {
+        this.spikeTimes.push(step);
+        this.refractoryUntil = step + this.refractoryPeriod;
+      }
       this.membranePotential = this.resetVoltage;
       this.refractoryTimer = this.refractoryPeriod;
     }
 
     this.potentialHistory.push(this.membranePotential);
+    if (step !== undefined) {
+      this.updateEvents.push({ step, input, potential: this.membranePotential, spiked });
+    }
     return spiked;
   }
 
@@ -150,6 +242,9 @@ class LIFNeuron {
   reset() {
     this.membranePotential = 0.0;
     this.refractoryTimer = 0;
+    this.refractoryUntil = -1;
+    this.lastUpdateStep = 0;
+    this.updateEvents = [{ step: 0, input: 0, potential: 0.0, spiked: false }];
     this.potentialHistory = [];
     this.spikeTimes = [];
     this.spikeCount = 0;
@@ -193,6 +288,10 @@ class EventQueue {
   constructor() {
     /** @type {Array<{time: number, sourceId: number, targetId: number, weight: number}>} */
     this._heap = [];
+    /** @type {number} Total cumulative insertions into heap. */
+    this.insertions = 0;
+    /** @type {number} Total cumulative removals from heap. */
+    this.removals = 0;
   }
 
   /** @returns {number} Number of queued events. */
@@ -210,6 +309,7 @@ class EventQueue {
    * @param {{time: number, sourceId: number, targetId: number, weight: number}} event
    */
   push(event) {
+    this.insertions++;
     this._heap.push(event);
     this._bubbleUp(this._heap.length - 1);
   }
@@ -221,6 +321,7 @@ class EventQueue {
   pop() {
     const heap = this._heap;
     if (heap.length === 0) return undefined;
+    this.removals++;
     const top = heap[0];
     const last = heap.pop();
     if (heap.length > 0) {
@@ -241,6 +342,8 @@ class EventQueue {
   /** Remove all events. */
   clear() {
     this._heap.length = 0;
+    this.insertions = 0;
+    this.removals = 0;
   }
 
   /* ---- internal heap operations ---- */
@@ -332,7 +435,13 @@ class SimulationEngine {
     /** @type {number} */
     this.currentStep = 0;
 
-    /** Total neuron updates performed (for benchmarking). */
+    /** Total neuron state integration evaluations. */
+    this.neuronIntegrations = 0;
+    /** Total lazy membrane decay evaluations. */
+    this.lazyDecayEvaluations = 0;
+    /** Total external input events injected. */
+    this.externalInputEvents = 0;
+    /** Total neuron updates performed (alias for neuronIntegrations). */
     this.updateCount = 0;
     /** Total spikes generated this run. */
     this.totalSpikeCount = 0;
@@ -340,6 +449,16 @@ class SimulationEngine {
     this.scheduledEventCount = 0;
     /** Cumulative synaptic events delivered to target neurons. */
     this.deliveredEventCount = 0;
+
+    /** @type {number} Wall-clock execution duration of most recent step (ms). */
+    this.lastStepExecutionMs = 0;
+    /** @type {number} Cumulative wall-clock execution duration across steps (ms). */
+    this.totalExecutionMs = 0;
+    /** @type {string} Simulation algorithm engine release version. */
+    this.simEngineVersion = '2.1.1-sparse';
+
+    /** @type {number} ID of neuron currently inspected in frontend charts. */
+    this.inspectedNeuronId = 0;
 
     /** @type {number|string} Experiment seed */
     this.seed = 42;
@@ -481,10 +600,15 @@ class SimulationEngine {
     this.isRunning = false;
     this.isPaused = false;
     this.currentStep = 0;
+    this.neuronIntegrations = 0;
+    this.lazyDecayEvaluations = 0;
+    this.externalInputEvents = 0;
     this.updateCount = 0;
     this.totalSpikeCount = 0;
     this.scheduledEventCount = 0;
     this.deliveredEventCount = 0;
+    this.lastStepExecutionMs = 0;
+    this.totalExecutionMs = 0;
     this.eventQueue.clear();
 
     if (this.prng) this.prng.reset();
@@ -514,6 +638,151 @@ class SimulationEngine {
     this._runResolve = null;
   }
 
+  /**
+   * Set the ID of the neuron currently inspected in the UI.
+   * @param {number} id
+   */
+  setInspectedNeuron(id) {
+    if (typeof id === 'number' && id >= 0 && id < this.neurons.length) {
+      this.inspectedNeuronId = id;
+    }
+  }
+
+  /* ==================================================================
+   *  Sparse Input Sampler & Lazy Potential Helpers
+   * ================================================================== */
+
+  /**
+   * Efficiently samples stochastic external input across the network.
+   * For Bernoulli process with success probability p = 1 - inputSparsity:
+   * - If p <= 0 (100% sparsity): no neurons receive input (0 PRNG draws).
+   * - If p >= 1 (0% sparsity): all neurons receive input.
+   * - If 0 < p < 1: uses geometric skip-sampling to determine the indices
+   *   of active neurons directly without scanning all idle neurons:
+   *   k ~ Geometric(p), index += 1 + k.
+   *
+   * @private
+   * @returns {Map<number, number>} neuronId → external current
+   */
+  _sampleExternalInputs() {
+    const inputMap = new Map();
+    const p = 1.0 - (this.config?.inputSparsity ?? 0.7);
+    const N = this.neurons.length;
+
+    if (p <= 0 || N === 0) {
+      return inputMap;
+    }
+
+    if (p >= 1.0) {
+      for (let i = 0; i < N; i++) {
+        const ext = 0.1 + this.inputPRNG.random() * 0.25;
+        inputMap.set(i, ext);
+        this.externalInputEvents++;
+      }
+      return inputMap;
+    }
+
+    // Geometric skip-sampling for exact Bernoulli process
+    const q = 1.0 - p;
+    const logQ = Math.log(q);
+    let curr = -1;
+
+    while (true) {
+      const u = Math.max(1e-15, Math.min(1.0 - 1e-15, this.inputPRNG.random()));
+      const k = Math.floor(Math.log(u) / logQ);
+      curr += 1 + k;
+      if (curr >= N) break;
+
+      const ext = 0.1 + this.inputPRNG.random() * 0.25;
+      inputMap.set(curr, ext);
+      this.externalInputEvents++;
+    }
+
+    return inputMap;
+  }
+
+  /**
+   * Calculate on-demand current membrane potential for a given neuron at `targetStep`.
+   * Evaluates lazy exponential decay and refractory status if the neuron was idle.
+   *
+   * @param {number} id           Neuron identifier.
+   * @param {number} [targetStep] Target simulation timestep.
+   * @returns {number} Normalized membrane potential.
+   */
+  getNeuronPotentialAt(id, targetStep = this.currentStep) {
+    const n = this.neurons[id];
+    if (!n) return 0.0;
+    if (this.config?.executionMode === 'clock') {
+      return n.membranePotential;
+    }
+
+    const lastStep = n.lastUpdateStep ?? 0;
+    if (lastStep >= targetStep) {
+      return n.membranePotential;
+    }
+
+    // If currently in refractory period at targetStep
+    if (targetStep <= (n.refractoryUntil ?? 0)) {
+      return n.resetVoltage;
+    }
+
+    // If refractory period ended between lastStep and targetStep
+    const refUntil = n.refractoryUntil ?? 0;
+    if (lastStep <= refUntil && targetStep > refUntil) {
+      const elapsed = targetStep - refUntil;
+      return n.resetVoltage * Math.pow(n.leakFactor, elapsed);
+    }
+
+    // Normal exponential decay from last calculated potential
+    const elapsed = targetStep - lastStep;
+    return n.membranePotential * Math.pow(n.leakFactor, elapsed);
+  }
+
+  /**
+   * Reconstruct the continuous step-by-step membrane potential trajectory for a neuron.
+   * Uses sparse update event history and mathematically exact exponential decay.
+   *
+   * @param {number} id Neuron identifier.
+   * @returns {number[]} Array of potentials from step 0 to currentStep.
+   */
+  getNeuronHistory(id) {
+    const n = this.neurons[id];
+    if (!n) return [];
+    if (this.config?.executionMode === 'clock') {
+      return n.potentialHistory.slice();
+    }
+
+    const history = [];
+    const updateMap = new Map();
+    for (const ev of n.updateEvents) {
+      updateMap.set(ev.step, ev);
+    }
+
+    let v = 0.0;
+    let refUntil = 0;
+    const maxSteps = Math.max(1, this.currentStep);
+
+    for (let s = 0; s < maxSteps; s++) {
+      if (updateMap.has(s)) {
+        const ev = updateMap.get(s);
+        v = ev.potential;
+        if (ev.spiked) {
+          refUntil = s + n.refractoryPeriod;
+        }
+      } else {
+        // Idle timestep
+        if (s <= refUntil) {
+          v = n.resetVoltage;
+        } else {
+          v = v * n.leakFactor;
+        }
+      }
+      history.push(v);
+    }
+
+    return history;
+  }
+
   /* ==================================================================
    *  step — single timestep
    * ================================================================== */
@@ -522,18 +791,19 @@ class SimulationEngine {
    * Execute a single simulation timestep.
    *
    * In **event-driven** mode only neurons with pending events (or stochastic
-   * input) are updated. In **clock** (time-stepped) mode every neuron is
-   * updated unconditionally.
+   * input) are evaluated using lazy membrane potential decay.
+   * In **clock** (time-stepped) mode every neuron is updated unconditionally.
    */
   step() {
     if (!this.config) {
       this.init();
     }
+    const t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
     const cfg = this.config;
     const step = this.currentStep;
 
     // --- adaptive temporal binning ---
-    let isBinStep = true; // should we process neurons this step?
+    let isBinStep = true;
     if (cfg.adaptiveTemporal) {
       const sparsity = this._computeSparsity();
       if (sparsity >= 0.65) {
@@ -549,20 +819,9 @@ class SimulationEngine {
       }
     }
 
-    // --- determine per-neuron input ---
-    /** @type {Map<number, number>} neuronId → total input this step */
-    const inputMap = new Map();
-
-    // Stochastic external input (inputSparsity = probability that a neuron
-    // does NOT receive input, so probability of input = 1 - inputSparsity)
-    // Uses seeded input PRNG for deterministic reproducibility
-    const inputProb = 1.0 - cfg.inputSparsity;
-    for (const n of this.neurons) {
-      if (this.inputPRNG.random() < inputProb) {
-        const ext = 0.1 + this.inputPRNG.random() * 0.25; // small random current
-        inputMap.set(n.id, (inputMap.get(n.id) ?? 0) + ext);
-      }
-    }
+    // --- 1. Gather sparse inputs ---
+    // Stochastic external input (geometric skip-sampler)
+    const inputMap = this._sampleExternalInputs();
 
     // Process event queue: deliver all events scheduled for this timestep
     while (this.eventQueue.size > 0 && this.eventQueue.peek().time <= step) {
@@ -580,11 +839,11 @@ class SimulationEngine {
         // Record placeholders for the deferred step
         this.spikeFrequency.push(0);
         this.eventQueueSnapshots.push(this.eventQueue.size);
-        for (const n of this.neurons) {
-          this.membranePotentialHistory.get(n.id).push(n.membranePotential);
-        }
         this.thresholdHistory.push(this._currentThreshold);
         this.currentStep++;
+        const t1 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+        this.lastStepExecutionMs = Math.max(0, t1 - t0);
+        this.totalExecutionMs += this.lastStepExecutionMs;
         return;
       }
       // Processing step: use accumulated input, then clear accumulator
@@ -594,52 +853,93 @@ class SimulationEngine {
       this._binAccumulator.clear();
     }
 
-    // --- update neurons ---
+    // --- 2. Update neurons (Sparse Event-Driven vs Discrete Time-Stepped) ---
     const spikedIds = [];
     const isEventDriven = cfg.executionMode === 'event';
 
-    for (const n of this.neurons) {
-      const inp = inputMap.get(n.id) ?? 0;
+    if (isEventDriven) {
+      // GENUINE SPARSE EVENT-DRIVEN EXECUTION:
+      // Evaluate ONLY neurons receiving external input or delivered synaptic events.
+      // Completely idle neurons skip evaluation; their membrane decay is evaluated lazily.
+      for (const [nid, inp] of inputMap) {
+        if (nid < 0 || nid >= this.neurons.length) continue;
+        const n = this.neurons[nid];
 
-      // Event-driven: skip neurons with zero input that are not in refractory
-      if (isEventDriven && inp === 0 && n.refractoryTimer === 0) {
-        // Still apply leak so membrane decays
-        n.membranePotential *= n.leakFactor;
-        n.potentialHistory.push(n.membranePotential);
-        this.membranePotentialHistory.get(n.id).push(n.membranePotential);
-        continue;
+        // Apply lazy decay from lastUpdateStep
+        n.lazyDecay(step);
+        this.lazyDecayEvaluations++;
+
+        // Integrate incoming current & test threshold crossing
+        this.neuronIntegrations++;
+        const spiked = n.integrateAndFire(inp, step);
+
+        if (spiked) {
+          spikedIds.push(n.id);
+          this.spikeRaster.get(n.id).push(step);
+          this.totalSpikeCount++;
+
+          // Enqueue post-synaptic events along actual directed outgoing connections
+          const outgoing = this._outgoing.get(n.id);
+          if (outgoing) {
+            for (const conn of outgoing) {
+              this.eventQueue.push({
+                time: step + conn.delay,
+                sourceId: conn.sourceId,
+                targetId: conn.targetId,
+                weight: conn.weight,
+              });
+              this.scheduledEventCount++;
+            }
+          }
+        }
       }
+    } else {
+      // DISCRETE TIME-STEPPED (CLOCK) EXECUTION:
+      // Evaluates every single neuron unconditionally at every timestep.
+      for (const n of this.neurons) {
+        const inp = inputMap.get(n.id) ?? 0;
+        this.lazyDecayEvaluations++;
+        this.neuronIntegrations++;
+        const spiked = n.update(inp, step);
 
-      this.updateCount++;
-      const spiked = n.update(inp, step);
-      this.membranePotentialHistory.get(n.id).push(n.membranePotential);
+        if (spiked) {
+          spikedIds.push(n.id);
+          this.spikeRaster.get(n.id).push(step);
+          this.totalSpikeCount++;
 
-      if (spiked) {
-        spikedIds.push(n.id);
-        this.spikeRaster.get(n.id).push(step);
-        this.totalSpikeCount++;
-
-        // Enqueue post-synaptic events along actual directed outgoing connections
-        const outgoing = this._outgoing.get(n.id);
-        if (outgoing) {
-          for (const conn of outgoing) {
-            this.eventQueue.push({
-              time: step + conn.delay,
-              sourceId: conn.sourceId,
-              targetId: conn.targetId,
-              weight: conn.weight,
-            });
-            this.scheduledEventCount++;
+          const outgoing = this._outgoing.get(n.id);
+          if (outgoing) {
+            for (const conn of outgoing) {
+              this.eventQueue.push({
+                time: step + conn.delay,
+                sourceId: conn.sourceId,
+                targetId: conn.targetId,
+                weight: conn.weight,
+              });
+              this.scheduledEventCount++;
+            }
           }
         }
       }
     }
 
-    // --- record data ---
+    // Alias for compatibility
+    this.updateCount = this.neuronIntegrations;
+
+    // --- 3. Event Accounting Invariant Assertion ---
+    // Scheduled Synaptic Events = Delivered Synaptic Events + Pending Synaptic Events
+    const pendingEvents = this.eventQueue.size;
+    if (this.scheduledEventCount !== this.deliveredEventCount + pendingEvents) {
+      console.warn(
+        `[NEUROCORE INVARIANT VIOLATION] Step ${step}: Scheduled (${this.scheduledEventCount}) != Delivered (${this.deliveredEventCount}) + Pending (${pendingEvents})`
+      );
+    }
+
+    // --- 4. Record step data ---
     this.spikeFrequency.push(spikedIds.length);
     this.eventQueueSnapshots.push(this.eventQueue.size);
 
-    // --- adaptive threshold ---
+    // --- 5. Adaptive threshold modulation ---
     if (cfg.adaptiveThreshold) {
       const activeRatio = spikedIds.length / this.neurons.length;
       if (activeRatio > 0.15) {
@@ -647,12 +947,16 @@ class SimulationEngine {
       } else if (activeRatio < 0.05) {
         this._currentThreshold = Math.max(0.2, this._currentThreshold - 0.03);
       }
-      // Apply updated threshold to all neurons
       for (const n of this.neurons) {
         n.threshold = this._currentThreshold;
       }
     }
     this.thresholdHistory.push(this._currentThreshold);
+
+    // --- 6. Execution duration accounting ---
+    const t1 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    this.lastStepExecutionMs = Math.max(0, t1 - t0);
+    this.totalExecutionMs += this.lastStepExecutionMs;
 
     this.currentStep++;
 
@@ -774,7 +1078,7 @@ class SimulationEngine {
    * @returns {SimState}
    */
   getState() {
-    const potentials = this.neurons.map((n) => n.membranePotential);
+    const potentials = this.neurons.map((n) => this.getNeuronPotentialAt(n.id, this.currentStep));
 
     // Neurons that spiked on the most recent step
     const lastStep = this.currentStep - 1;
@@ -784,7 +1088,7 @@ class SimulationEngine {
 
     // Active = membrane potential above 25 % of threshold
     const active = this.neurons
-      .filter((n) => n.membranePotential > n.threshold * 0.25)
+      .filter((n) => potentials[n.id] > n.threshold * 0.25)
       .map((n) => n.id);
 
     const activeSet = new Set(active);
@@ -798,10 +1102,20 @@ class SimulationEngine {
       spikeRasterObj[id] = times.slice();
     }
 
+    // On-demand history proxy: populates inspected neuron directly, reconstructs others on demand
     const historyObj = {};
-    for (const [id, vals] of this.membranePotentialHistory) {
-      historyObj[id] = vals.slice();
-    }
+    historyObj[this.inspectedNeuronId] = this.getNeuronHistory(this.inspectedNeuronId);
+    const historyProxy = new Proxy(historyObj, {
+      get: (target, prop) => {
+        if (prop in target) return target[prop];
+        const nid = parseInt(prop, 10);
+        if (!isNaN(nid) && nid >= 0 && nid < this.neurons.length) {
+          target[prop] = this.getNeuronHistory(nid);
+          return target[prop];
+        }
+        return undefined;
+      },
+    });
 
     return {
       step: this.currentStep,
@@ -810,21 +1124,29 @@ class SimulationEngine {
       active,
       inactive,
       spikeCount: this.totalSpikeCount,
-      updateCount: this.updateCount,
-      eventQueueSize: this.eventQueue.size,
+      updateCount: this.neuronIntegrations, // compatibility alias
+      neuronIntegrations: this.neuronIntegrations,
+      lazyDecayEvaluations: this.lazyDecayEvaluations,
+      externalInputEvents: this.externalInputEvents,
       scheduledEvents: this.scheduledEventCount,
       deliveredEvents: this.deliveredEventCount,
       pendingEvents: this.eventQueue.size,
+      queueInsertions: this.eventQueue.insertions,
+      queueRemovals: this.eventQueue.removals,
+      eventQueueSize: this.eventQueue.size,
       currentThreshold: this._currentThreshold,
       thresholdHistory: this.thresholdHistory.slice(),
       seed: this.seed,
       neuronCount: this.neurons.length,
       connectionCount: this.connections.length,
       spikeRaster: spikeRasterObj,
-      membranePotentialHistory: historyObj,
+      membranePotentialHistory: historyProxy,
       spikeFrequency: this.spikeFrequency.slice(),
       activeCount: active.length,
       inactiveCount: inactive.length,
+      simEngineVersion: this.simEngineVersion,
+      executionDurationMs: this.lastStepExecutionMs,
+      totalExecutionDurationMs: this.totalExecutionMs,
     };
   }
 
@@ -846,9 +1168,22 @@ class SimulationEngine {
 }
 
 /* ====================================================================
- *  Export on window
+ *  Export on window and module
  * ==================================================================== */
 
+SimulationEngine.LIFNeuron = LIFNeuron;
+SimulationEngine.SynapticConnection = SynapticConnection;
+SimulationEngine.EventQueue = EventQueue;
 SimulationEngine.SeededPRNG = SeededPRNG;
-window.SimulationEngine = SimulationEngine;
-window.SeededPRNG = SeededPRNG;
+
+if (typeof window !== 'undefined') {
+  window.SimulationEngine = SimulationEngine;
+  window.LIFNeuron = LIFNeuron;
+  window.SynapticConnection = SynapticConnection;
+  window.EventQueue = EventQueue;
+  window.SeededPRNG = SeededPRNG;
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { SimulationEngine, LIFNeuron, SynapticConnection, EventQueue, SeededPRNG };
+}

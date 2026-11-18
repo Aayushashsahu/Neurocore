@@ -1,6 +1,6 @@
 /**
  * NEUROCORE — Adaptive Event-Driven Neuromorphic Computing Platform
- * Main Frontend Application Controller (v2.0.0)
+ * Main Frontend Application Controller (v2.1.1)
  *
  * Coordinates:
  * - Single-page application navigation & responsive sidebar
@@ -199,6 +199,9 @@
       };
       simEngine = new window.SimulationEngine(engineOpts);
       simEngine.init(engineOpts);
+      if (typeof simEngine.setInspectedNeuron === 'function') {
+        simEngine.setInspectedNeuron(selectedNeuronId);
+      }
       topo = simEngine.getTopology();
 
       // Synchronize 3D Neural Mesh with actual engine topology
@@ -252,6 +255,9 @@
 
   $('#membraneNeuronSelect')?.addEventListener('change', e => {
     selectedNeuronId = parseInt(e.target.value, 10) || 0;
+    if (simEngine && typeof simEngine.setInspectedNeuron === 'function') {
+      simEngine.setInspectedNeuron(selectedNeuronId);
+    }
     if (membraneChart) {
       membraneChart.setNeuronId(selectedNeuronId);
       refreshChartsFromEngine();
@@ -396,13 +402,13 @@
     const recentSpikeRate = state.spikeFrequency.length > 0 ? state.spikeFrequency[state.spikeFrequency.length - 1] : 0;
 
     $('#spikesMetric').textContent = state.spikeCount.toLocaleString();
-    $('#updatesMetric').textContent = state.updateCount.toLocaleString();
+    $('#updatesMetric').textContent = state.neuronIntegrations.toLocaleString();
     $('#activeMetric').textContent = state.activeCount.toLocaleString();
     const inactEl = $('#inactiveMetric');
     if (inactEl) inactEl.textContent = state.inactiveCount.toLocaleString();
     $('#densityMetric').textContent = `${densityPct.toFixed(1)}%`;
     const simTimeEl = $('#metricSimTime');
-    if (simTimeEl) simTimeEl.textContent = `Step ${String(state.step).padStart(2, '0')} (T+${state.step}.0 ms)`;
+    if (simTimeEl) simTimeEl.textContent = `Step ${String(state.step).padStart(3, '0')}`;
 
     // Right column activity distribution & genuine metrics
     const fireRateEl = $('#firingRateMetric');
@@ -418,7 +424,7 @@
     if (queueSizeEl) queueSizeEl.textContent = `${state.pendingEvents} PENDING`;
 
     // 7. Update Frame and Status
-    $('#networkFrame').textContent = `STEP ${String(state.step).padStart(2, '0')}`;
+    $('#networkFrame').textContent = `STEP ${String(state.step).padStart(3, '0')}`;
     $('#networkStatus').textContent = `${state.spiked.length} spikes in step ${state.step}`;
 
     // 8. Update Event Queue Visualization
@@ -429,7 +435,7 @@
       const label = state.step === 1 ? 'START' : state.spiked.length > 0 ? 'SPIKE' : 'STEP';
       const msg = state.spiked.length > 0
         ? `${state.spiked.length} neuron(s) fired: [${state.spiked.slice(0, 5).join(', ')}${state.spiked.length > 5 ? '…' : ''}]`
-        : `Step ${state.step} evaluated`;
+        : `Step ${state.step} evaluated (${state.neuronIntegrations} integrations)`;
       addLog(state.step, label, msg);
     }
 
@@ -475,7 +481,7 @@
       const wt = typeof ev.weight === 'number' ? ev.weight.toFixed(3) : '0.250';
       const status = due <= (simEngine.currentStep || 0) ? '<span style="color:var(--cyan)">DUE NOW</span>' : 'SCHEDULED';
       return `<tr>
-        <td>T+${due}</td>
+        <td>Step ${String(due).padStart(3, '0')}</td>
         <td>Neuron ${src}</td>
         <td>Neuron ${tgt}</td>
         <td>${wt}</td>
@@ -564,13 +570,13 @@
     setSimStatus('IDLE');
 
     $('#networkStatus').textContent = 'Awaiting execution';
-    $('#networkFrame').textContent = 'STEP 00';
+    $('#networkFrame').textContent = 'STEP 000';
     ['#spikesMetric', '#updatesMetric', '#activeMetric', '#inactiveMetric', '#densityMetric'].forEach(sel => {
       const el = $(sel);
       if (el) el.textContent = '—';
     });
     const simTimeEl = $('#metricSimTime');
-    if (simTimeEl) simTimeEl.textContent = 'T+00 ms';
+    if (simTimeEl) simTimeEl.textContent = 'Step 000';
     const fireRateEl = $('#firingRateMetric');
     if (fireRateEl) fireRateEl.textContent = '0 spikes/step';
     const distFill = $('#activityDistFill');
@@ -600,7 +606,7 @@
 
     const row = document.createElement('div');
     row.className = 'log-entry';
-    row.innerHTML = `<span class="log-time">T+${String(time).padStart(2, '0')}</span><span class="log-type">${type}</span><span class="log-message">${message}</span>`;
+    row.innerHTML = `<span class="log-time">Step ${String(time).padStart(3, '0')}</span><span class="log-type">${type}</span><span class="log-message">${message}</span>`;
     log.appendChild(row);
 
     while (log.children.length > 30) {
@@ -636,12 +642,14 @@
 
     const experimentData = {
       platform: 'NEUROCORE Adaptive Event-Driven Neuromorphic Computing Platform',
-      version: '2.1.0',
+      version: '2.1.1',
+      simEngineVersion: state.simEngineVersion || '2.1.1-sparse',
       timestamp: new Date().toISOString(),
       experimentMetadata: {
         id: `EXP-NC-${simConfig.seed}-${Date.now().toString(36).toUpperCase()}`,
-        engine: 'SimulationEngine (Mulberry32 PRNG)',
-        model: 'Leaky Integrate-and-Fire (LIF)',
+        engine: 'SimulationEngine (Mulberry32 PRNG + Sparse Geometric Sampler)',
+        model: 'Leaky Integrate-and-Fire (LIF, Lazy Decay)',
+        timeUnit: 'discrete simulation steps (normalized)',
       },
       configuration: {
         seed: simConfig.seed,
@@ -670,10 +678,17 @@
       runtimeMetrics: {
         evaluatedSteps: state.step,
         totalSpikesFired: state.spikeCount,
+        neuronIntegrations: state.neuronIntegrations,
+        lazyDecayEvaluations: state.lazyDecayEvaluations,
+        externalInputEvents: state.externalInputEvents,
         scheduledSynapticEvents: state.scheduledEvents,
         deliveredSynapticEvents: state.deliveredEvents,
         pendingEventsInQueue: state.pendingEvents,
-        neuronStateUpdates: state.updateCount,
+        queueInsertions: state.queueInsertions,
+        queueRemovals: state.queueRemovals,
+        eventAccountingInvariantVerified: state.scheduledEvents === state.deliveredEvents + state.pendingEvents,
+        executionDurationMs: state.executionDurationMs,
+        totalExecutionDurationMs: state.totalExecutionDurationMs,
         activeNeuronCount: state.activeCount,
         inactiveNeuronCount: state.inactiveCount,
         finalStepSpikes: state.spiked,
@@ -906,13 +921,15 @@
     if (!window.NeuroCharts || !window.NeuroCharts.Benchmark) return;
     const Bench = window.NeuroCharts.Benchmark;
 
-    // 1. Grouped Bar Chart (Neuron Updates, Synaptic Events, State Evaluations)
+    // 1. Grouped Bar Chart (Neuron Integrations, Synaptic Events, Queue Heap Ops, Lazy Decay Evals)
     const groupedCanvas = $('#benchGroupedCanvas');
     if (groupedCanvas) {
+      const eventSynEvents = Math.round(25000 * activeShare * 0.88);
+      const eventQueueOps = eventSynEvents * 2; // Insertion + Removal
       Bench.renderGroupedBar(groupedCanvas, {
         groups: [
           {
-            label: 'Neuron Updates',
+            label: 'Integrations',
             ann: 10000,
             clock: 10000,
             event: eventUpdates,
@@ -921,13 +938,19 @@
             label: 'Synaptic Events',
             ann: 25000,
             clock: 25000,
-            event: Math.round(25000 * activeShare * 0.88),
+            event: eventSynEvents,
           },
           {
-            label: 'State Evals',
-            ann: 10000,
+            label: 'Queue Heap Ops',
+            ann: 0,
+            clock: 0,
+            event: eventQueueOps,
+          },
+          {
+            label: 'Lazy Decays',
+            ann: 0,
             clock: 10000,
-            event: Math.round(eventUpdates * 1.08),
+            event: eventUpdates,
           },
         ],
       });
@@ -978,18 +1001,21 @@
     const sparsity = sparsitySlider ? parseInt(sparsitySlider.value, 10) : 70;
     const activeShare = (100 - sparsity) / 100;
     const eventUpdates = Math.round(10000 * activeShare);
+    const eventSynEvents = Math.round(25000 * activeShare * 0.88);
+    const eventQueueOps = eventSynEvents * 2;
 
     const benchmarkData = {
       groups: [
-        { label: 'Neuron Updates', ann: 10000, clock: 10000, event: eventUpdates },
-        { label: 'Synaptic Events', ann: 25000, clock: 25000, event: Math.round(25000 * activeShare * 0.88) },
-        { label: 'State Evaluations', ann: 10000, clock: 10000, event: Math.round(eventUpdates * 1.08) },
-        { label: 'Modeled Relative Latency', ann: 100, clock: 92, event: Math.round(26 + activeShare * 68) },
+        { label: 'Neuron Integrations', ann: 10000, clock: 10000, event: eventUpdates, unit: 'integrations', type: 'Modelled Algorithmic' },
+        { label: 'Synaptic Events', ann: 25000, clock: 25000, event: eventSynEvents, unit: 'events', type: 'Modelled Algorithmic' },
+        { label: 'Queue Heap Operations', ann: 0, clock: 0, event: eventQueueOps, unit: 'push/pop operations', type: 'Modelled Algorithmic' },
+        { label: 'Lazy Decay Evaluations', ann: 0, clock: 10000, event: eventUpdates, unit: 'evaluations', type: 'Modelled Algorithmic' },
+        { label: 'Relative Latency Proxy', ann: 100, clock: 92, event: Math.round(26 + activeShare * 68), unit: 'normalized proxy cycles', type: 'Modelled Proxy' },
       ],
     };
 
     window.NeuroCharts.Benchmark.downloadCSV(benchmarkData, `neurocore-benchmark-sparsity-${sparsity}pct.csv`);
-    toast('Benchmark CSV downloaded.');
+    toast('Benchmark CSV downloaded with complete scientific schema.');
   });
 
   // ─────────────────────────────────────────────────────────────────────────
