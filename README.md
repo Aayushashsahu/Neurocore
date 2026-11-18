@@ -45,6 +45,17 @@ NEUROCORE is an interactive scientific computing and visualization platform for 
 - **Automated Verification:** 41 comprehensive automated tests across 5 test suites (`Suite A`: LIF Neuron Model Correctness, `Suite B`: Sparse Scheduler & Geometric Sampler, `Suite C`: Mode Equivalence, `Suite D`: Conservation Invariants, `Suite E`: Deterministic Reproducibility).
 - **Run Locally:** Execute `node test-simulation.js` for instant regression testing.
 
+### 7. Simulation Lab 3D Neuromorphic Visualization Refinement
+- **Volumetric 3D Spatial Topology:** Redesigned the central 3D network into an asymmetric volumetric architecture spanning three functional tiers: Sensory Input Layer (lower-left, anterior), Associative Neuromorphic Core (elevated, deep central dome), and Spike Output Projection Hub (right mid-anterior, descending forward) with organic golden-spiral volume distribution across 12 to 96 neurons.
+- **Synaptic Connectivity Modes:** Introduced three rendering modes with dedicated UI controls:
+  - *Curated (Default):* Displays a clean, readable skeleton of dominant outgoing synapses and inter-cluster projection arcs using smooth Quadratic Bezier curves.
+  - *Full Graph:* Renders 100% of the actual simulation connection graph as an intricate, delicate volumetric synaptic mesh.
+  - *Active Only:* Hides resting lines to focus purely on dynamic event-driven spike propagation pathways.
+- **Active Spike Propagation & Dynamic Pathway Illumination:** When neurons fire, their actual directed outgoing synapses illuminate in electric cyan or recurrent violet with traveling luminous particles traversing the 3D curved axons, triggering post-synaptic depolarization pulses upon arrival.
+- **High-Visibility Phosphorescent Materials & Studio Rim Lighting:** Resting neurons feature visible slate-cyan bodies with subtle phosphorescent inner glow and dedicated rear rim lighting, eliminating pitch-black nodes.
+- **Intelligent Camera Auto-Framing:** Dynamically computes the 3D bounding volume to frame the network occupying ~75% of the viewport with smooth reset tweening.
+- **Interactive Raycast Inspection:** Hovering over any 3D neuron displays a glassmorphic HUD tooltip showing Neuron ID, Cluster, Membrane Voltage, Firing State, Spike Count, In/Out Synapses, and Mean Weight; clicking any neuron immediately selects it for real-time membrane potential trace inspection.
+
 ---
 
 ## Key Highlights & Capabilities

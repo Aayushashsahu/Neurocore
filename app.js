@@ -334,10 +334,13 @@
 
     // 1. Update 3D Neural Mesh
     if (window.NeuroViz && typeof window.NeuroViz.updateSimViz === 'function') {
+      const spikeCounts = simEngine ? simEngine.neurons.map(n => n.spikeCount) : [];
       window.NeuroViz.updateSimViz({
         potentials: state.potentials,
         spiked: state.spiked,
         active: state.active,
+        step: state.currentStep,
+        spikeCounts,
       });
     }
 
@@ -838,6 +841,41 @@
       const isPaused = window.NeuroViz.togglePause3D();
       $('#toggle3DPauseBtn').textContent = isPaused ? '▶ Resume 3D' : '⏸ Pause 3D';
       toast(`3D visualizer ${isPaused ? 'paused' : 'resumed'}.`);
+    }
+  });
+
+  // 3D Synaptic Connectivity Modes
+  $$('.mode-pill').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const mode = e.currentTarget.dataset.connMode;
+      $$('.mode-pill').forEach(b => b.classList.toggle('selected', b === e.currentTarget));
+      if (window.NeuroViz && typeof window.NeuroViz.setConnectivityMode === 'function') {
+        window.NeuroViz.setConnectivityMode(mode);
+        const labels = {
+          curated: 'Curated (Dominant Pathways)',
+          full: 'Full Graph (Complete Synaptic Mesh)',
+          active: 'Active Pathways Only',
+        };
+        toast(`Synaptic Display: ${labels[mode] || mode}`);
+      }
+    });
+  });
+
+  // Interactive Neuron Selection from 3D Viewport
+  window.addEventListener('neurocore-select-neuron', (e) => {
+    const id = e.detail?.id;
+    if (id !== undefined && id !== null) {
+      selectedNeuronId = id;
+      if (simEngine && typeof simEngine.setInspectedNeuron === 'function') {
+        simEngine.setInspectedNeuron(selectedNeuronId);
+      }
+      const inspectSelect = $('#membraneNeuronSelect') || $('#inspectNeuron');
+      if (inspectSelect) inspectSelect.value = selectedNeuronId;
+      if (membraneChart) {
+        membraneChart.setNeuronId(selectedNeuronId);
+      }
+      refreshChartsFromEngine();
+      toast(`Inspecting Neuron #${String(selectedNeuronId).padStart(2, '0')}`);
     }
   });
 

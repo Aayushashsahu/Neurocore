@@ -417,12 +417,21 @@
                   <strong>CENTRAL 3D NEUROMORPHIC NETWORK</strong>
                   <span class="sw-sub-badge" id="simModeBadge">MODE: EVENT-DRIVEN</span>
                 </div>
+                <!-- Connectivity Mode Selector -->
+                <div class="sim-3d-modes-bar">
+                  <span class="sim-3d-label">SYNAPSES:</span>
+                  <div class="segmented-modes" id="simConnModes" role="group" aria-label="Synaptic Connectivity Mode">
+                    <button class="mode-pill selected" data-conn-mode="curated" title="Display curated representative pathways (clean, readable)">Curated</button>
+                    <button class="mode-pill" data-conn-mode="full" title="Display complete actual synaptic graph (100%)">Full Graph</button>
+                    <button class="mode-pill" data-conn-mode="active" title="Display dynamic active spike pathways only">Active Only</button>
+                  </div>
+                </div>
                 <!-- 3D HUD Controls -->
                 <div class="sim-3d-hud">
                   <button class="hud-btn" id="toggleRotateBtn" title="Toggle Auto-Rotation">↺ Rotate</button>
                   <button class="hud-btn" id="zoomInBtn" title="Zoom In">+</button>
                   <button class="hud-btn" id="zoomOutBtn" title="Zoom Out">−</button>
-                  <button class="hud-btn" id="resetSimCamera" title="Reset 3D Camera">Reset ↺</button>
+                  <button class="hud-btn" id="resetSimCamera" title="Fit &amp; Reset 3D Camera">Reset ↺</button>
                   <button class="hud-btn" id="toggle3DPauseBtn" title="Pause 3D Rendering">⏸ Pause 3D</button>
                 </div>
               </div>
@@ -434,19 +443,21 @@
                   <strong>Central 3D Network Ready</strong>
                   <span>Click Run Simulation or Step to trigger spike events.</span>
                 </div>
-                <div class="viewport-hud-tag top-left">3D CLUSTERED MESH // WEBGL</div>
+                <div class="viewport-hud-tag top-left" id="sim3dModeTag">3D VOLUMETRIC MESH // CURATED</div>
                 <div class="viewport-hud-tag top-right" id="networkFrame">STEP 000</div>
                 <div class="viewport-hud-tag bottom-left" id="networkStatus">Awaiting execution</div>
-                <div class="viewport-hud-tag bottom-right">LIF NEURON MODEL</div>
+                <div class="viewport-hud-tag bottom-right" id="sim3dDetailTag">48 NODES · CURATED SYNAPSES</div>
+                <div class="sim-3d-tooltip" id="sim3dTooltip" style="display: none;"></div>
               </div>
 
               <!-- 3D Footer Legend -->
               <div class="sim-3d-footer">
                 <div class="sw-legend-group">
-                  <span><i class="legend-dot active-dot"></i> Spiking (#00D9FF)</span>
+                  <span><i class="legend-dot resting-dot"></i> Resting</span>
                   <span><i class="legend-dot turquoise-dot"></i> Depolarizing</span>
-                  <span><i class="legend-dot idle-dot"></i> Resting</span>
-                  <span><i class="legend-dot signal-dot"></i> Synaptic delay</span>
+                  <span><i class="legend-dot active-dot"></i> Spiking (#00D9FF)</span>
+                  <span><i class="legend-dot pulse-dot"></i> Spike Pulse</span>
+                  <span><i class="legend-dot recurrent-dot"></i> Recurrent</span>
                 </div>
                 <button class="btn btn-ghost btn-xs" id="clearSimulation">Clear View</button>
               </div>

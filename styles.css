@@ -1634,6 +1634,56 @@ img { max-width: 100%; display: block; }
   letter-spacing: 0.5px;
 }
 
+/* Connectivity Mode Selector */
+.sim-3d-modes-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sim-3d-label {
+  font-size: 7.5px;
+  font-family: var(--font-mono);
+  color: var(--faint);
+  letter-spacing: 0.6px;
+  font-weight: 700;
+}
+
+.segmented-modes {
+  display: inline-flex;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.mode-pill {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  padding: 2px 7px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.mode-pill:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.mode-pill.selected {
+  color: var(--cyan);
+  background: rgba(0, 217, 255, 0.12);
+  border-color: rgba(0, 217, 255, 0.35);
+  font-weight: 700;
+  box-shadow: 0 0 8px rgba(0, 217, 255, 0.15);
+}
+
 .sim-3d-hud {
   display: flex;
   align-items: center;
@@ -1660,9 +1710,9 @@ img { max-width: 100%; display: block; }
 
 .sim-3d-viewport {
   position: relative;
-  height: 380px;
+  height: 420px;
   flex: 1;
-  min-height: 320px;
+  min-height: 350px;
   background: radial-gradient(ellipse at 50% 50%, #071524 0%, #040810 85%);
   border-bottom: 1px solid var(--line);
   overflow: hidden;
@@ -1683,6 +1733,75 @@ img { max-width: 100%; display: block; }
 .viewport-hud-tag.top-right { top: 10px; right: 12px; color: var(--cyan); }
 .viewport-hud-tag.bottom-left { bottom: 10px; left: 12px; }
 .viewport-hud-tag.bottom-right { bottom: 10px; right: 12px; }
+
+/* Interactive 3D Inspection Tooltip */
+.sim-3d-tooltip {
+  position: absolute;
+  z-index: 10;
+  pointer-events: none;
+  background: rgba(7, 14, 26, 0.94);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 217, 255, 0.35);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7), 0 0 14px rgba(0, 217, 255, 0.15);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  color: var(--text);
+  min-width: 175px;
+  transition: opacity 0.12s ease;
+}
+
+.tt-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(0, 217, 255, 0.2);
+  padding-bottom: 5px;
+  margin-bottom: 6px;
+}
+
+.tt-id {
+  font-weight: 800;
+  color: var(--cyan);
+  letter-spacing: 0.6px;
+}
+
+.tt-cluster {
+  font-size: 7.5px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+.tt-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tt-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 8px;
+  color: var(--muted);
+}
+
+.tt-row strong {
+  font-weight: 600;
+}
+
+.tt-hint {
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+  font-size: 7px;
+  color: var(--cyan);
+  opacity: 0.85;
+  text-align: right;
+}
 
 .sim-3d-footer {
   display: flex;
@@ -1707,6 +1826,15 @@ img { max-width: 100%; display: block; }
   gap: 5px;
 }
 
+.resting-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  background: #1d3752;
+  border: 1px solid #2e567d;
+}
+
 .turquoise-dot {
   width: 7px;
   height: 7px;
@@ -1714,6 +1842,24 @@ img { max-width: 100%; display: block; }
   display: inline-block;
   background: var(--turquoise);
   box-shadow: 0 0 6px var(--turquoise);
+}
+
+.pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  background: #00D9FF;
+  box-shadow: 0 0 6px #00D9FF;
+}
+
+.recurrent-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  background: #8767FF;
+  box-shadow: 0 0 6px #8767FF;
 }
 
 /* Right Column (2D Neural Activity Map) */
