@@ -9,7 +9,7 @@
  * crossed factorial campaigns, and structured data exports (CSV & JSON).
  * 
  * @file experiment-runner.js
- * @version 2.2.1
+ * @version 2.2.2
  * @license MIT
  */
 
@@ -178,12 +178,19 @@
 
   /**
    * Compute paired differences D_i = clock[i] - event[i] and comprehensive statistics.
+   * Rejects mismatched array lengths to prevent silent truncation.
    * @param {number[]} clockVals
    * @param {number[]} eventVals
    * @returns {object}
    */
   function pairedDifferences(clockVals, eventVals) {
-    const n = Math.min(clockVals.length, eventVals.length);
+    if (!clockVals || !eventVals) {
+      throw new Error('pairedDifferences requires both clockVals and eventVals arrays.');
+    }
+    if (clockVals.length !== eventVals.length) {
+      throw new Error(`Paired array length mismatch: Clock has ${clockVals.length} items, Event has ${eventVals.length} items.`);
+    }
+    const n = clockVals.length;
     const diffs = [];
     for (let i = 0; i < n; i++) {
       diffs.push(clockVals[i] - eventVals[i]);
@@ -208,12 +215,19 @@
   /**
    * Compute paired percentage reductions R_i = ((clock[i] - event[i]) / clock[i]) * 100%.
    * Handles zero denominators explicitly without distorting data.
+   * Rejects mismatched array lengths to prevent silent truncation.
    * @param {number[]} clockVals
    * @param {number[]} eventVals
    * @returns {object}
    */
   function pairedPercentageReductions(clockVals, eventVals) {
-    const n = Math.min(clockVals.length, eventVals.length);
+    if (!clockVals || !eventVals) {
+      throw new Error('pairedPercentageReductions requires both clockVals and eventVals arrays.');
+    }
+    if (clockVals.length !== eventVals.length) {
+      throw new Error(`Paired array length mismatch: Clock has ${clockVals.length} items, Event has ${eventVals.length} items.`);
+    }
+    const n = clockVals.length;
     const reductions = [];
     let zeroDenominatorCount = 0;
 
@@ -323,15 +337,34 @@
    */
   function verifyDifferentialParity(clockEngine, eventEngine, options = {}) {
     const tolerance = options.voltageTolerance ?? 1e-7;
-    const nNeurons = clockEngine.neurons ? clockEngine.neurons.length : 0;
-    const steps = clockEngine.currentStep ?? 0;
+    const diagnostics = [];
+    const nNeurons = clockEngine.neurons ? clockEngine.neurons.length : (clockEngine.neuronCount ?? 0);
+    const cSteps = clockEngine.currentStep ?? clockEngine.simulationSteps ?? 0;
+    const eSteps = eventEngine.currentStep ?? eventEngine.simulationSteps ?? 0;
+
+    // 0. Simulation Step Count Parity
+    let stepCountPassed = true;
+    if (cSteps !== eSteps) {
+      stepCountPassed = false;
+      diagnostics.push(`Step count mismatch: Clock executed ${cSteps} steps, Event executed ${eSteps} steps`);
+    }
 
     // 1. Topology Parity
     const cTopo = typeof clockEngine.getTopology === 'function' ? clockEngine.getTopology() : { neuronCount: 0, connectionCount: 0, connections: [] };
     const eTopo = typeof eventEngine.getTopology === 'function' ? eventEngine.getTopology() : { neuronCount: 0, connectionCount: 0, connections: [] };
     let topologyMismatches = 0;
-    if (cTopo.neuronCount !== eTopo.neuronCount) topologyMismatches++;
-    if (cTopo.connectionCount !== eTopo.connectionCount) topologyMismatches++;
+    if (cTopo.neuronCount !== eTopo.neuronCount) {
+      topologyMismatches++;
+      diagnostics.push(`Neuron count mismatch: Clock has ${cTopo.neuronCount}, Event has ${eTopo.neuronCount}`);
+    }
+    if (cTopo.connectionCount !== eTopo.connectionCount) {
+      topologyMismatches++;
+      diagnostics.push(`Connection count mismatch: Clock has ${cTopo.connectionCount}, Event has ${eTopo.connectionCount}`);
+    }
+    if (cTopo.connections.length !== eTopo.connections.length) {
+      topologyMismatches++;
+      diagnostics.push(`Connection list length mismatch: Clock has ${cTopo.connections.length}, Event has ${eTopo.connections.length}`);
+    }
     const topoCount = Math.min(cTopo.connections.length, eTopo.connections.length);
     for (let i = 0; i < topoCount; i++) {
       const c = cTopo.connections[i];
@@ -342,27 +375,53 @@
       }
     }
     const topologyPassed = topologyMismatches === 0;
+    if (!topologyPassed && !diagnostics.some(d => d.startsWith('Topology mismatch'))) {
+      diagnostics.push(`Topology mismatch: ${topologyMismatches} structural discrepancies detected`);
+    }
 
-    // 2. Input Parity
-    const inputPassed = (clockEngine.externalInputEvents === eventEngine.externalInputEvents);
+    // 2. Input Parity (Event counts & sequence trace when available)
+    let inputPassed = (clockEngine.externalInputEvents === eventEngine.externalInputEvents);
+    let inputTraceVerified = false;
+    if (!inputPassed) {
+      diagnostics.push(`External input count mismatch: Clock ${clockEngine.externalInputEvents} vs Event ${eventEngine.externalInputEvents}`);
+    }
+    const cTrace = typeof clockEngine.getInputTrace === 'function' ? clockEngine.getInputTrace() : (clockEngine.inputTrace || null);
+    const eTrace = typeof eventEngine.getInputTrace === 'function' ? eventEngine.getInputTrace() : (eventEngine.inputTrace || null);
+    if (cTrace && eTrace && (cTrace.length > 0 || eTrace.length > 0)) {
+      inputTraceVerified = true;
+      if (cTrace.length !== eTrace.length) {
+        inputPassed = false;
+        diagnostics.push(`External input trace length mismatch: Clock has ${cTrace.length} events, Event has ${eTrace.length} events`);
+      } else {
+        for (let k = 0; k < cTrace.length; k++) {
+          const ct = cTrace[k];
+          const et = eTrace[k];
+          if (ct.step !== et.step || ct.targetId !== et.targetId || Math.abs(ct.current - et.current) > 1e-9) {
+            inputPassed = false;
+            diagnostics.push(`External input sequence divergence at index ${k}: Clock(step=${ct.step}, target=${ct.targetId}, current=${ct.current.toFixed(4)}) vs Event(step=${et.step}, target=${et.targetId}, current=${et.current.toFixed(4)})`);
+            break;
+          }
+        }
+      }
+    }
 
     // 3. Spike Raster Parity (per-neuron exact timestamps)
     let rasterMismatches = 0;
     let firstRasterDivergence = null;
     for (let i = 0; i < nNeurons; i++) {
-      const cSpikes = clockEngine.spikeRaster?.get ? (clockEngine.spikeRaster.get(i) || []) : [];
-      const eSpikes = eventEngine.spikeRaster?.get ? (eventEngine.spikeRaster.get(i) || []) : [];
+      const cSpikes = clockEngine.spikeRaster?.get ? (clockEngine.spikeRaster.get(i) || []) : (clockEngine.spikeRaster?.[i] || []);
+      const eSpikes = eventEngine.spikeRaster?.get ? (eventEngine.spikeRaster.get(i) || []) : (eventEngine.spikeRaster?.[i] || []);
       if (cSpikes.length !== eSpikes.length) {
         rasterMismatches++;
         if (!firstRasterDivergence) {
-          firstRasterDivergence = { neuronId: i, clockSpikes: cSpikes.slice(), eventSpikes: eSpikes.slice() };
+          firstRasterDivergence = { neuronId: i, clockSpikes: cSpikes.slice(), eventSpikes: eSpikes.slice(), reason: `Count mismatch: Clock ${cSpikes.length} vs Event ${eSpikes.length}` };
         }
       } else {
         for (let s = 0; s < cSpikes.length; s++) {
           if (cSpikes[s] !== eSpikes[s]) {
             rasterMismatches++;
             if (!firstRasterDivergence) {
-              firstRasterDivergence = { neuronId: i, clockSpikes: cSpikes.slice(), eventSpikes: eSpikes.slice(), divergentStep: cSpikes[s] };
+              firstRasterDivergence = { neuronId: i, clockSpikes: cSpikes.slice(), eventSpikes: eSpikes.slice(), divergentStep: cSpikes[s], eventStep: eSpikes[s] };
             }
             break;
           }
@@ -370,61 +429,98 @@
       }
     }
     const rasterPassed = rasterMismatches === 0;
+    if (!rasterPassed) {
+      diagnostics.push(`Spike raster mismatch across ${rasterMismatches} neurons. First divergence at neuron ${firstRasterDivergence ? firstRasterDivergence.neuronId : 'N/A'}`);
+    }
 
-    // 4. Step-by-Step Membrane Potential Trajectory Parity
+    // 4. Step-by-Step Membrane Potential Trajectory Parity (Full trajectory without Math.min truncation)
     let trajectoryComparisons = 0;
     let trajectoryMismatches = 0;
     let maxVoltageDelta = 0;
     let firstTrajectoryDivergence = null;
+    let trajectoryIntegrityPassed = true;
 
-    if (typeof clockEngine.getNeuronHistory === 'function' && typeof eventEngine.getNeuronHistory === 'function') {
-      for (let i = 0; i < nNeurons; i++) {
-        const cHist = clockEngine.getNeuronHistory(i);
-        const eHist = eventEngine.getNeuronHistory(i);
-        const len = Math.min(cHist.length, eHist.length, steps);
-        for (let s = 0; s < len; s++) {
-          trajectoryComparisons++;
-          const cv = cHist[s] ?? 0;
-          const ev = eHist[s] ?? 0;
-          const delta = Math.abs(cv - ev);
-          if (delta > maxVoltageDelta) maxVoltageDelta = delta;
-          if (delta > tolerance) {
-            trajectoryMismatches++;
-            if (!firstTrajectoryDivergence) {
-              firstTrajectoryDivergence = {
-                neuronId: i,
-                step: s,
-                clockVoltage: cv,
-                eventVoltage: ev,
-                delta,
-              };
-            }
+    if (!stepCountPassed) {
+      trajectoryIntegrityPassed = false;
+    }
+
+    for (let i = 0; i < nNeurons; i++) {
+      const cHist = typeof clockEngine.getNeuronHistory === 'function' ? clockEngine.getNeuronHistory(i) : (clockEngine.membraneHistories?.[i] || null);
+      const eHist = typeof eventEngine.getNeuronHistory === 'function' ? eventEngine.getNeuronHistory(i) : (eventEngine.membraneHistories?.[i] || null);
+
+      if (!cHist || !eHist || !Array.isArray(cHist) || !Array.isArray(eHist)) {
+        trajectoryIntegrityPassed = false;
+        trajectoryMismatches++;
+        diagnostics.push(`Missing membrane potential history for neuron ${i}`);
+        continue;
+      }
+
+      if (cHist.length !== cSteps || eHist.length !== eSteps || cHist.length !== eHist.length) {
+        trajectoryIntegrityPassed = false;
+        trajectoryMismatches++;
+        diagnostics.push(`Truncated or mismatched history length for neuron ${i}: expected ${cSteps}, got Clock ${cHist.length}, Event ${eHist.length}`);
+        continue;
+      }
+
+      for (let s = 0; s < cSteps; s++) {
+        trajectoryComparisons++;
+        const cv = cHist[s];
+        const ev = eHist[s];
+        const delta = Math.abs(cv - ev);
+        if (delta > maxVoltageDelta) maxVoltageDelta = delta;
+        if (delta > tolerance) {
+          trajectoryMismatches++;
+          if (!firstTrajectoryDivergence) {
+            firstTrajectoryDivergence = {
+              neuronId: i,
+              step: s,
+              clockVoltage: cv,
+              eventVoltage: ev,
+              delta,
+            };
           }
         }
       }
     }
-    const trajectoryPassed = trajectoryMismatches === 0;
+    const trajectoryPassed = trajectoryIntegrityPassed && trajectoryMismatches === 0;
+    if (!trajectoryPassed && !diagnostics.some(d => d.startsWith('Membrane trajectory mismatch') || d.startsWith('Truncated') || d.startsWith('Missing membrane') || d.startsWith('Step count mismatch'))) {
+      diagnostics.push(`Membrane trajectory mismatch: ${trajectoryMismatches} point(s) exceeded tolerance ${tolerance}. Max delta: ${maxVoltageDelta}`);
+    }
 
-    // 5. Synaptic Events Parity
-    const synapticPassed = (clockEngine.scheduledEventCount === eventEngine.scheduledEventCount || clockEngine.scheduledEvents === eventEngine.scheduledEvents) &&
-                           (clockEngine.deliveredEventCount === eventEngine.deliveredEventCount || clockEngine.deliveredEvents === eventEngine.deliveredEvents);
+    // 5. Synaptic Events Parity & Conservation Invariants
+    const cScheduled = clockEngine.scheduledEventCount ?? clockEngine.scheduledEvents ?? 0;
+    const eScheduled = eventEngine.scheduledEventCount ?? eventEngine.scheduledEvents ?? 0;
+    const cDelivered = clockEngine.deliveredEventCount ?? clockEngine.deliveredEvents ?? 0;
+    const eDelivered = eventEngine.deliveredEventCount ?? eventEngine.deliveredEvents ?? 0;
+    const cPending = clockEngine.eventQueue ? (typeof clockEngine.eventQueue.size === 'function' ? clockEngine.eventQueue.size() : (clockEngine.eventQueue.size ?? 0)) : (clockEngine.pendingEvents ?? 0);
+    const ePending = eventEngine.eventQueue ? (typeof eventEngine.eventQueue.size === 'function' ? eventEngine.eventQueue.size() : (eventEngine.eventQueue.size ?? 0)) : (eventEngine.pendingEvents ?? 0);
 
-    const allPassed = topologyPassed && inputPassed && rasterPassed && trajectoryPassed && synapticPassed;
+    const cConservation = (cScheduled === cDelivered + cPending);
+    const eConservation = (eScheduled === eDelivered + ePending);
+    const countsMatch = (cScheduled === eScheduled) && (cDelivered === eDelivered) && (cPending === ePending);
+    const synapticPassed = countsMatch && cConservation && eConservation;
 
-    const diagnostics = [];
-    if (!topologyPassed) diagnostics.push(`Topology mismatch: ${topologyMismatches} discrepancies`);
-    if (!inputPassed) diagnostics.push(`External input count mismatch: Clock ${clockEngine.externalInputEvents} vs Event ${eventEngine.externalInputEvents}`);
-    if (!rasterPassed) diagnostics.push(`Spike raster mismatch across ${rasterMismatches} neurons. First divergence at neuron ${firstRasterDivergence ? firstRasterDivergence.neuronId : 'N/A'}`);
-    if (!trajectoryPassed) diagnostics.push(`Membrane trajectory mismatch: ${trajectoryMismatches} point(s) exceeded tolerance ${tolerance}. Max delta: ${maxVoltageDelta}`);
-    if (!synapticPassed) diagnostics.push('Synaptic event count mismatch between clock and event engines');
+    if (!countsMatch) {
+      diagnostics.push(`Synaptic event count mismatch: Clock(sched=${cScheduled}, deliv=${cDelivered}, pend=${cPending}) vs Event(sched=${eScheduled}, deliv=${eDelivered}, pend=${ePending})`);
+    }
+    if (!cConservation) {
+      diagnostics.push(`Clock engine conservation invariant violated: Scheduled(${cScheduled}) != Delivered(${cDelivered}) + Pending(${cPending})`);
+    }
+    if (!eConservation) {
+      diagnostics.push(`Event engine conservation invariant violated: Scheduled(${eScheduled}) != Delivered(${eDelivered}) + Pending(${ePending})`);
+    }
+
+    const allPassed = stepCountPassed && topologyPassed && inputPassed && rasterPassed && trajectoryPassed && synapticPassed;
 
     return {
       allPassed,
       isParity: allPassed,
       tolerance,
       voltageTolerance: tolerance,
+      stepCountParity: stepCountPassed,
       topologyParity: topologyPassed,
       inputParity: inputPassed,
+      inputTraceVerified,
       rasterParity: rasterPassed,
       trajectoryParity: trajectoryPassed,
       synapticEventsParity: synapticPassed,
@@ -437,6 +533,7 @@
       },
       input: {
         passed: inputPassed,
+        traceVerified: inputTraceVerified,
         clockInputs: clockEngine.externalInputEvents,
         eventInputs: eventEngine.externalInputEvents,
       },
@@ -456,14 +553,18 @@
       },
       synapticEvents: {
         passed: synapticPassed,
-        clockScheduled: clockEngine.scheduledEventCount ?? clockEngine.scheduledEvents,
-        eventScheduled: eventEngine.scheduledEventCount ?? eventEngine.scheduledEvents,
-        clockDelivered: clockEngine.deliveredEventCount ?? clockEngine.deliveredEvents,
-        eventDelivered: eventEngine.deliveredEventCount ?? eventEngine.deliveredEvents,
+        clockConservation: cConservation,
+        eventConservation: eConservation,
+        clockScheduled: cScheduled,
+        eventScheduled: eScheduled,
+        clockDelivered: cDelivered,
+        eventDelivered: eDelivered,
+        clockPending: cPending,
+        eventPending: ePending,
       },
       summary: allPassed
         ? `FULL DIFFERENTIAL PARITY VERIFIED (${trajectoryComparisons} trajectory points, max delta: ${maxVoltageDelta.toExponential(2)})`
-        : `DIFFERENTIAL MISMATCH: ${rasterMismatches} raster / ${trajectoryMismatches} trajectory divergences`,
+        : `DIFFERENTIAL MISMATCH: ${diagnostics.join('; ')}`,
     };
   }
 
@@ -516,6 +617,7 @@
       mode,
       adaptiveThreshold,
       adaptiveTemporal,
+      traceInputs: Boolean(trialParams.traceInputs),
       seed,
     });
     const initDurationMs = ((typeof performance !== 'undefined') ? performance.now() : Date.now()) - tInitStart;
@@ -585,7 +687,10 @@
       // Precise operation counters
       clockEvaluations: engine.clockEvaluations ?? (mode === 'clock' ? (neuronCount * simulationSteps) : 0),
       neuronIntegrations: engine.neuronIntegrations,
+      activeIntegrations: engine.activeIntegrations ?? (mode === 'event' ? (engine.neuronIntegrations ?? 0) : 0),
+      lazyDecayCalls: engine.lazyDecayCalls ?? (engine.lazyDecayEvaluations ?? 0),
       lazyDecayEvaluations: engine.lazyDecayEvaluations,
+      lazyExponentialEvaluations: engine.lazyExponentialEvaluations ?? (engine.lazyDecayEvaluations ?? 0),
       thresholdEvaluations: engine.thresholdEvaluations ?? engine.neuronIntegrations,
       refractoryChecks: engine.refractoryChecks ?? (mode === 'clock' ? (neuronCount * simulationSteps) : engine.neuronIntegrations),
       externalInputEvents: engine.externalInputEvents,
@@ -608,6 +713,7 @@
       perNeuronSpikes,
       spikeRaster: spikeRasterCopy,
       membraneHistories,
+      inputTrace: (trialParams.traceInputs && typeof engine.getInputTrace === 'function') ? engine.getInputTrace() : null,
       status: 'completed',
     };
   }
@@ -840,8 +946,10 @@
         }
       }
 
-      const totalTrials = plan.length;
-      let completedTrials = 0;
+      const totalTrialsPlanned = plan.length;
+      let attemptedTrialsCount = 0;
+      let completedTrialsCount = 0;
+      let failedTrialsCount = 0;
 
       // 3. Execute trials with asynchronous chunking
       for (let i = 0; i < plan.length; i++) {
@@ -849,13 +957,15 @@
           break;
         }
 
+        attemptedTrialsCount++;
         const trialParams = plan[i];
 
         try {
           const trialRecord = executeTrial(trialParams, this.EngineConstructor);
           this.rawTrials.push(trialRecord);
-          completedTrials++;
+          completedTrialsCount++;
         } catch (err) {
+          failedTrialsCount++;
           this.rawTrials.push({
             ...trialParams,
             status: 'failed',
@@ -865,12 +975,13 @@
 
         // Progress notification
         if (typeof this.progressCallback === 'function') {
-          const pct = Math.round((completedTrials / totalTrials) * 100);
+          const pct = Math.round((attemptedTrialsCount / totalTrialsPlanned) * 100);
           const modeStr = trialParams.mode || 'event';
           this.progressCallback({
-            completedTrials,
-            trialIndex: completedTrials,
-            totalTrials,
+            completedTrials: completedTrialsCount,
+            attemptedTrials: attemptedTrialsCount,
+            trialIndex: attemptedTrialsCount,
+            totalTrials: totalTrialsPlanned,
             currentRep: trialParams.repetitionIndex + 1,
             totalReps: repetitions,
             currentMode: modeStr,
@@ -881,7 +992,7 @@
             trialSeed: trialParams.seed,
             step: trialParams.simulationSteps,
             totalSteps: trialParams.simulationSteps,
-            statusText: `Running trial ${completedTrials}/${totalTrials} (${modeStr === 'event' ? 'Event-Driven' : 'Time-Stepped'} SNN, Seed ${trialParams.seed}, Order: ${trialParams.pairOrder})...`,
+            statusText: `Running trial ${attemptedTrialsCount}/${totalTrialsPlanned} (${modeStr === 'event' ? 'Event-Driven' : 'Time-Stepped'} SNN, Seed ${trialParams.seed}, Order: ${trialParams.pairOrder})...`,
           });
         }
 
@@ -889,8 +1000,12 @@
         await new Promise(resolve => setTimeout(resolve, 0));
       }
 
+      const notStartedTrialsCount = totalTrialsPlanned - attemptedTrialsCount;
+      const cancelledTrialsCount = this.isCancelled ? notStartedTrialsCount : 0;
       this.isRunning = false;
-      const finalStatus = this.isCancelled ? 'cancelled' : 'completed';
+      const finalStatus = this.isCancelled
+        ? 'cancelled'
+        : (failedTrialsCount > 0 ? (completedTrialsCount > 0 ? 'partial_failure' : 'failed') : 'completed');
 
       // 4. Compute statistical summaries and differential parity analysis across completed trials
       const results = this.aggregateResults(this.rawTrials, campaignConfig, experimentId, finalStatus, {
@@ -900,6 +1015,12 @@
           durationMs: warmupDurationMs,
         },
         voltageTolerance,
+        totalTrialsPlanned,
+        attemptedTrialsCount,
+        completedTrialsCount,
+        failedTrialsCount,
+        notStartedTrialsCount,
+        cancelledTrialsCount,
       });
 
       if (callbacks.onComplete) {
@@ -1021,12 +1142,18 @@
               }
             }
 
-            if (clTrial.membraneHistories && evTrial.membraneHistories) {
+            if (clTrial.simulationSteps !== evTrial.simulationSteps) {
+              trajectoryMatch = false;
+            } else if (clTrial.membraneHistories && evTrial.membraneHistories) {
+              const expectedSteps = clTrial.simulationSteps;
               for (let nid = 0; nid < neuronCount; nid++) {
-                const ch = clTrial.membraneHistories[nid] || [];
-                const eh = evTrial.membraneHistories[nid] || [];
-                const len = Math.min(ch.length, eh.length);
-                for (let s = 0; s < len; s++) {
+                const ch = clTrial.membraneHistories[nid];
+                const eh = evTrial.membraneHistories[nid];
+                if (!ch || !eh || ch.length !== expectedSteps || eh.length !== expectedSteps) {
+                  trajectoryMatch = false;
+                  break;
+                }
+                for (let s = 0; s < expectedSteps; s++) {
                   const delta = Math.abs(ch[s] - eh[s]);
                   if (delta > pairMaxDelta) pairMaxDelta = delta;
                   if (delta > tolerance) {
@@ -1034,14 +1161,19 @@
                   }
                 }
               }
+            } else {
+              trajectoryMatch = false;
             }
 
             if (pairMaxDelta > maxObservedVoltageDelta) {
               maxObservedVoltageDelta = pairMaxDelta;
             }
 
+            const clInvariant = clTrial.invariantValid ?? (clTrial.scheduledEvents === clTrial.deliveredEvents + (clTrial.pendingEvents ?? 0));
+            const evInvariant = evTrial.invariantValid ?? (evTrial.scheduledEvents === evTrial.deliveredEvents + (evTrial.pendingEvents ?? 0));
             const eventsMatch = (clTrial.deliveredEvents === evTrial.deliveredEvents) &&
-                                (clTrial.scheduledEvents === evTrial.scheduledEvents);
+                                (clTrial.scheduledEvents === evTrial.scheduledEvents) &&
+                                clInvariant && evInvariant;
 
             const parityMatch = rasterMatch && trajectoryMatch && eventsMatch;
             if (parityMatch) passedParityChecks++;
@@ -1095,27 +1227,32 @@
         }
       });
 
-      const parityRate = totalParityChecks > 0 ? (passedParityChecks / totalParityChecks) : 1.0;
+      const parityRate = totalParityChecks > 0 ? (passedParityChecks / totalParityChecks) : null;
+      const allMatched = totalParityChecks > 0 && passedParityChecks === totalParityChecks;
 
       return {
         experimentId,
         createdAt: new Date().toISOString(),
         status,
-        algorithmVersion: 'v2.2.1-validated',
-        simEngineVersion: '2.2.1-validated',
-        experimentRunnerVersion: '2.2.1',
+        algorithmVersion: 'v2.2.2-validated',
+        simEngineVersion: '2.2.2-validated',
+        experimentRunnerVersion: '2.2.2',
         campaignConfig,
         warmup: meta.warmup || { executed: false, trialsCount: 0, durationMs: 0 },
         warmupExecuted: meta.warmup ? meta.warmup.executed : false,
         warmupDurationMs: meta.warmup ? meta.warmup.durationMs : 0,
-        totalTrialsPlanned: rawTrials.length,
+        totalTrialsPlanned: meta.totalTrialsPlanned ?? rawTrials.length,
+        attemptedTrialsCount: meta.attemptedTrialsCount ?? rawTrials.length,
         completedTrialsCount: completed.length,
-        cancelledTrialsCount: rawTrials.length - completed.length,
+        failedTrialsCount: meta.failedTrialsCount ?? rawTrials.filter(t => t.status === 'failed').length,
+        notStartedTrialsCount: meta.notStartedTrialsCount ?? 0,
+        cancelledTrialsCount: meta.cancelledTrialsCount ?? 0,
         parityVerification: {
           totalPairedChecked: totalParityChecks,
           passedCount: passedParityChecks,
-          parityMatchRate: Number((parityRate * 100).toFixed(1)),
-          allMatched: passedParityChecks === totalParityChecks && totalParityChecks > 0,
+          parityMatchRate: parityRate !== null ? Number((parityRate * 100).toFixed(1)) : null,
+          allMatched,
+          statusText: totalParityChecks === 0 ? 'N/A (No paired comparisons)' : (allMatched ? 'PARITY VERIFIED' : 'PARITY FAILED'),
           maxObservedVoltageDelta,
           tolerance,
           voltageTolerance: tolerance,
@@ -1166,7 +1303,10 @@
       'Adaptive Temporal',
       'Clock Neuron Evaluations',
       'Neuron Integrations',
+      'Active Integrations',
+      'Lazy Decay Calls',
       'Lazy Decay Evaluations',
+      'Lazy Exponential Evaluations',
       'Threshold Evaluations',
       'Refractory Checks',
       'External Input Events',
@@ -1204,7 +1344,10 @@
         t.adaptiveTemporal ? 'TRUE' : 'FALSE',
         t.clockEvaluations ?? '',
         t.neuronIntegrations ?? '',
+        t.activeIntegrations ?? '',
+        t.lazyDecayCalls ?? '',
         t.lazyDecayEvaluations ?? '',
+        t.lazyExponentialEvaluations ?? '',
         t.thresholdEvaluations ?? '',
         t.refractoryChecks ?? '',
         t.externalInputEvents ?? '',

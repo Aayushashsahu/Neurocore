@@ -1,5 +1,5 @@
 # NEUROCORE Mathematical Model & Validation Specification
-**Version:** v2.2.1-validated  
+**Version:** v2.2.2-validated  
 **Classification:** Research Specification & Numerical Methodology  
 **Target Architecture:** Discrete-Time Leaky Integrate-and-Fire (LIF) with Lazy Evaluation & Sparse Event-Driven Parity
 
@@ -17,7 +17,7 @@ $$\tilde{V}_i(t) = \lambda V_i(t-1) + I_i(t)$$
 
 where:
 - $V_i(t-1)$ is the normalized membrane potential at the conclusion of timestep $t-1$.
-- $\lambda \in (0, 1)$ is the dimensionless membrane potential decay factor (default $\lambda = 0.80$), mathematically defined by:
+- $\lambda \in (0, 1)$ is the dimensionless membrane potential decay factor (default $\lambda = 0.78$), mathematically defined by:
   $$\lambda = \exp\left(-\frac{\Delta t}{\tau_m}\right)$$
 - $I_i(t)$ represents the aggregate dimensionless input current delivered to neuron $i$ at timestep $t$.
 
@@ -128,10 +128,10 @@ where $\sigma \in [0, 1]$ is the configured input sparsity (e.g., $\sigma = 0.70
 1. **Time-Stepped Mode ($O(N)$):**
    Iterates over all $N$ neurons sequentially, drawing a uniform random number $U_i \sim \mathcal{U}(0, 1)$ for each node:
    $$I_i^{\text{ext}}(t) = \begin{cases} 
-   0.15 + 0.35 \cdot U_i', & \text{if } U_i < p_{\text{active}} \\
+   0.10 + 0.25 \cdot U_i', & \text{if } U_i < p_{\text{active}} \\
    0.0, & \text{otherwise}
    \end{cases}$$
-   Complexity per timestep: $\Theta(N)$.
+   where $U_i' \sim \mathcal{U}(0, 1)$, yielding input currents in the range $[0.10, 0.35)$. Complexity per timestep: $\Theta(N)$.
 
 2. **Event-Driven Sparse Mode ($O(k)$, where $k \ll N$):**
    Rather than evaluating $N$ Bernoulli trials, the event-driven engine directly samples the index of the *next active neuron* using the Geometric distribution. The number of skipped inactive neurons $\Delta k$ until the next success follows:
@@ -218,37 +218,46 @@ $$\mathcal{O}\left(|\mathcal{V}_{\text{active}}(t)| + \sum_{j \in \text{Spikes}(
 
 ## 9. Adaptive Threshold Policy
 
-To regulate network homeostatic balance and prevent runaway synchronization or quiescence, NEUROCORE incorporates an adaptive threshold mechanism:
+To regulate network homeostatic balance and prevent runaway synchronization or quiescence, NEUROCORE incorporates a global population-level adaptive threshold mechanism. At the conclusion of each simulation timestep $t$, the population spike density $\rho(t)$ is computed across all $N$ neurons:
 
-$$\theta_i(t+1) = \begin{cases}
-\min\left(\theta_i(t) + \alpha, \; \theta_{\text{max}}\right), & \text{if neuron } i \text{ spiked at } t \\
-\max\left(\theta_i(t) - \beta, \; \theta_{\text{min}}\right), & \text{if neuron } i \text{ was silent at } t
+$$\rho(t) = \frac{1}{N} \sum_{i=0}^{N-1} S_i(t)$$
+
+The global firing threshold $\theta(t+1)$ applied uniformly to all neurons at timestep $t+1$ is modulated according to:
+
+$$\theta(t+1) = \begin{cases}
+\min\left(\theta(t) + 0.05, \; 1.10\right), & \text{if } \rho(t) > 0.15 \\
+\max\left(\theta(t) - 0.03, \; 0.20\right), & \text{if } \rho(t) < 0.05 \\
+\theta(t), & \text{otherwise}
 \end{cases}$$
 
 ### Parameter Bounds
 - Baseline threshold: $\theta_0 = 0.65$
-- Adaptation increment: $\alpha = 0.05$
-- Decay decrement: $\beta = 0.005$
-- Rigid physiological bounds:
-  $$\theta_i(t) \in [\theta_{\text{min}}, \theta_{\text{max}}] = [0.20, 1.10]$$
-
-In global adaptive mode, the network threshold adjusts dynamically based on aggregate population firing rate relative to target band $\rho^* \in [0.08, 0.25]$.
+- Target active density band: $\rho^* \in [0.05, 0.15]$
+- Upward increment (burst suppression): $+0.05$
+- Downward decrement (quiescence prevention): $-0.03$
+- Physiological clamping bounds:
+  $$\theta(t) \in [\theta_{\text{min}}, \theta_{\text{max}}] = [0.20, 1.10]$$
 
 ---
 
 ## 10. Adaptive Temporal Binning Policy
 
-When enabled, the adaptive temporal policy dynamically alters the simulation discretization step $\Delta t_{\text{eff}} \in \{1, 2\}$ based on network sparsity and event queue load:
+When enabled (`adaptiveTemporal: true`), the simulation engine dynamically adapts the temporal discretization resolution $B(t) \in \{1, 2\}$ based on input sparsity $\sigma$:
 
-$$\Delta t_{\text{eff}} = \begin{cases}
-2, & \text{if } \sigma \ge 0.65 \text{ and } |\mathcal{Q}_t| < 0.1 \cdot |\mathcal{E}| \\
+$$B(t) = \begin{cases}
+2, & \text{if } \sigma \ge 0.65 \\
 1, & \text{otherwise}
 \end{cases}$$
+
+### Two-Step Accumulation and Deferral Cycle
+When $B(t) = 2$, the engine operates in a 2-step temporal binning window:
+1. **Odd Timesteps ($t \pmod 2 \neq 0$):** Processing is deferred. External sensory inputs and delivered synaptic currents are accumulated into a persistent buffer (`_binAccumulator`), queue snapshots and threshold histories are logged, and neuron state evaluations are bypassed.
+2. **Even Timesteps ($t \pmod 2 = 0$):** Processing step. All inputs accumulated over the 2-step window are delivered to target neurons, full membrane updates and spike propagation are executed, and `_binAccumulator` is cleared.
 
 ### Characterization as an Approximation Policy
 > [!IMPORTANT]
 > Adaptive Temporal Binning is mathematically characterized as an **approximation policy**.
-> By coalescing events across a 2-step window, it trades millisecond-precise spike timing for an approximate ~50% reduction in evaluation cycles. It is disabled by default during strict differential parity audits to ensure exact mathematical identity.
+> By coalescing events across a 2-step window, it trades sub-millisecond spike timing for an approximate ~50% reduction in evaluation cycles. It is disabled by default during strict differential parity audits to ensure exact mathematical identity.
 
 ---
 
@@ -259,9 +268,12 @@ To eliminate ambiguous or inflated performance claims, NEUROCORE enforces strict
 | Counter Name | Scope | Formal Mathematical Definition |
 | :--- | :--- | :--- |
 | `clockEvaluations` | Clock Mode Only | Total neuron loop iterations: $N \times T_{\text{steps}}$. Strictly **0** in Event Mode. |
-| `neuronIntegrations` | Both Modes | Number of times non-refractory input current $I_i(t) > 0$ was accumulated into membrane potential. Refractory steps are excluded. |
-| `lazyDecayEvaluations` | Event Mode Only | Number of closed-form multi-step decays evaluated: $V \cdot \lambda^{\Delta t}$ for $\Delta t \ge 1$. Strictly **0** in Clock Mode. |
-| `thresholdEvaluations` | Both Modes | Total comparisons of membrane potential candidate $\tilde{V}_i(t)$ against $\theta_i(t)$. |
+| `neuronIntegrations` | Both Modes | Total non-refractory membrane potential evaluation cycles. Refractory steps are excluded. |
+| `activeIntegrations` | Both Modes | Number of non-refractory evaluations where positive current ($I_i(t) > 0$) was actually added to membrane potential. |
+| `lazyDecayCalls` | Event Mode Only | Total invocations of `lazyDecay(step)`. Strictly **0** in Clock Mode. |
+| `lazyExponentialEvaluations` | Event Mode Only | Number of actual closed-form exponential evaluations (`Math.pow`) performed when $V \neq 0$ and $\Delta t \ge 1$. Strictly **0** in Clock Mode. |
+| `lazyDecayEvaluations` | Event Mode Only | Preserved compatibility alias for `lazyExponentialEvaluations`. Strictly **0** in Clock Mode. |
+| `thresholdEvaluations` | Both Modes | Total comparisons of candidate membrane potential $\tilde{V}_i(t)$ against threshold $\theta_i(t)$. |
 | `refractoryChecks` | Both Modes | Total evaluations checking whether $t \le t_i^{\text{ref\_until}}$. |
 | `scheduledEvents` | Both Modes | Total synaptic events inserted into priority queue: $\sum_t \sum_j S_j(t) \cdot \text{deg}_{\text{out}}(j)$. |
 | `deliveredEvents` | Both Modes | Total synaptic events extracted from queue and applied to post-synaptic buffers. |
@@ -336,16 +348,19 @@ $$\text{SEM} = \frac{s}{\sqrt{n}}$$
 $$\text{Margin of Error} = t_{0.975, \, df} \times \text{SEM}$$
 $$\text{CI}_{95\%} = \left[ \bar{x} - t_{0.975, \, df} \times \text{SEM}, \;\; \bar{x} + t_{0.975, \, df} \times \text{SEM} \right]$$
 
-### Exact Critical Values Table ($df = 1$ to $30$)
-The engine embeds the exact lookup table for $df \in [1, 100]$:
-- $df=1: 12.706$
-- $df=2: 4.303$
-- $df=4: 2.776$
-- $df=9: 2.262$
-- $df=19: 2.093$
-- $df=29: 2.045$
+### Exact Critical Values Table & Cornish-Fisher Expansion
+The engine embeds the exact lookup table for $df \in [1, 40]$ and milestone entries $df \in \{50, 60, 70, 80, 90, 100, 120\}$:
+- $df=1: 12.7062$
+- $df=2: 4.3027$
+- $df=4: 2.7764$
+- $df=9: 2.2622$
+- $df=19: 2.0930$
+- $df=29: 2.0452$
+- $df=40: 2.0211$
+- $df=120: 1.9799$
 
-For $df > 100$, critical values are computed via the Cornish-Fisher asymptotic expansion converging to $z_{0.975} = 1.95996$.
+For unlisted intermediate degrees of freedom or $df > 120$, critical values are computed via the high-accuracy two-term Cornish-Fisher asymptotic expansion converging to $z_{0.975} = 1.95996398$:
+$$t \approx z + \frac{z^3 + z}{4 \cdot df} + \frac{5z^5 + 16z^3 + 3z}{96 \cdot df^2}$$
 
 ---
 

@@ -1,6 +1,6 @@
 /**
  * NEUROCORE — Adaptive Event-Driven Neuromorphic Computing Platform
- * Main Frontend Application Controller (v2.2.1)
+ * Main Frontend Application Controller (v2.2.2)
  *
  * Coordinates:
  * - Single-page application navigation & responsive sidebar
@@ -1000,7 +1000,10 @@
     const parityPill = $('#expParityPill');
     if (parityPill && result.parityVerification) {
       const tol = result.parityVerification.voltageTolerance ?? result.parityVerification.tolerance ?? 1e-7;
-      if (result.parityVerification.allMatched) {
+      if (result.parityVerification.totalPairedChecked === 0 || result.parityVerification.parityMatchRate === null) {
+        parityPill.className = 'eos-pill dim';
+        parityPill.textContent = 'PARITY AUDIT: N/A';
+      } else if (result.parityVerification.allMatched) {
         parityPill.className = 'eos-pill pass';
         parityPill.textContent = `PARITY PASS (100% · ΔV ≤ ${tol.toExponential(0)})`;
       } else {

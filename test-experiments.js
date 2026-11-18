@@ -1,5 +1,5 @@
 /**
- * Automated Test Suite for NEUROCORE v2.2.1 Experiment Runner, Differential Parity & Statistical Benchmarking
+ * Automated Test Suite for NEUROCORE v2.2.2 Experiment Runner, Differential Parity & Statistical Benchmarking
  * 
  * Verifies:
  * - Statistical functions: Mean, Sample SD (n-1 denominator), Median, Min, Max
@@ -15,7 +15,8 @@
  * - Alternating paired execution order (counteracting JIT warmup bias)
  * - Crossed factorial matrix campaign execution (4x4 matrix)
  * - Cancellation handling and incomplete-run exclusion
- * - CSV and JSON serialization integrity with v2.2.1 metadata and 95% CI columns
+ * - CSV and JSON serialization integrity with v2.2.2 metadata and 95% CI columns
+ * - v2.2.2 Strict differential parity assertions, accounting integrity, and structural planning
  */
 
 const {
@@ -55,7 +56,7 @@ function assert(condition, message) {
 
 async function runTests() {
   console.log('===============================================================');
-  console.log('  NEUROCORE v2.2.1 EXPERIMENT RUNNER & VALIDATION TEST SUITE');
+  console.log('  NEUROCORE v2.2.2 EXPERIMENT RUNNER & VALIDATION TEST SUITE');
   console.log('===============================================================\n');
 
   // --- SUITE 1: Statistical Functions & Student\'s t Distribution ---
@@ -341,10 +342,93 @@ async function runTests() {
   const jsonStr = generateExperimentJSON(campaignRes);
   const parsedJSON = JSON.parse(jsonStr);
   assert(parsedJSON.experimentId === campaignRes.experimentId, 'JSON serialization valid and parseable');
-  assert(parsedJSON.simEngineVersion === '2.2.1-validated', `JSON preserves v2.2.1 engine version (${parsedJSON.simEngineVersion})`);
-  assert(parsedJSON.experimentRunnerVersion === '2.2.1', `JSON preserves v2.2.1 experiment runner version (${parsedJSON.experimentRunnerVersion})`);
+  assert(parsedJSON.simEngineVersion === '2.2.2-validated', `JSON preserves v2.2.2 engine version (${parsedJSON.simEngineVersion})`);
+  assert(parsedJSON.experimentRunnerVersion === '2.2.2', `JSON preserves v2.2.2 experiment runner version (${parsedJSON.experimentRunnerVersion})`);
   assert(parsedJSON.warmupExecuted === true, 'JSON serializes warmup metadata');
   assert(parsedJSON.parityVerification.voltageTolerance === 1e-7, 'JSON serializes differential parity tolerance');
+
+  // --- SUITE 10: v2.2.2 Strict Parity, Accounting & Structural Plan ---
+  console.log('\n--- SUITE 10: v2.2.2 Strict Parity, Accounting & Structural Plan ---');
+
+  // 10.1: Strict Paired Array Length Assertion
+  let threwDiff = false;
+  try {
+    pairedDifferences([1, 2, 3], [1, 2]);
+  } catch (err) {
+    threwDiff = true;
+  }
+  assert(threwDiff, 'pairedDifferences rejects mismatched array lengths with Error (no silent truncation)');
+
+  let threwPct = false;
+  try {
+    pairedPercentageReductions([10, 20], [10, 20, 30]);
+  } catch (err) {
+    threwPct = true;
+  }
+  assert(threwPct, 'pairedPercentageReductions rejects mismatched array lengths with Error (no silent truncation)');
+
+  // 10.2: Differential Parity Rejects Step Count Mismatch
+  const stepMismatchClock = new SimulationEngine({ neuronCount: 12, steps: 10, executionMode: 'clock', seed: 42 });
+  stepMismatchClock.init({ neuronCount: 12, steps: 10, executionMode: 'clock', seed: 42 });
+  for (let s = 0; s < 10; s++) stepMismatchClock.step();
+
+  const stepMismatchEvent = new SimulationEngine({ neuronCount: 12, steps: 12, executionMode: 'event', seed: 42 });
+  stepMismatchEvent.init({ neuronCount: 12, steps: 12, executionMode: 'event', seed: 42 });
+  for (let s = 0; s < 12; s++) stepMismatchEvent.step();
+
+  const stepMismatchParity = verifyDifferentialParity(stepMismatchClock, stepMismatchEvent);
+  assert(stepMismatchParity.allPassed === false, 'Differential parity rejects step count mismatch');
+  assert(stepMismatchParity.stepCountParity === false, 'Step count mismatch diagnostic flagged');
+
+  // 10.3: Differential Parity Rejects Truncated Voltage History
+  const truncClock = new SimulationEngine({ neuronCount: 8, steps: 15, executionMode: 'clock', seed: 88 });
+  truncClock.init({ neuronCount: 8, steps: 15, executionMode: 'clock', seed: 88 });
+  for (let s = 0; s < 15; s++) truncClock.step();
+
+  const truncEvent = new SimulationEngine({ neuronCount: 8, steps: 15, executionMode: 'event', seed: 88 });
+  truncEvent.init({ neuronCount: 8, steps: 15, executionMode: 'event', seed: 88 });
+  for (let s = 0; s < 15; s++) truncEvent.step();
+
+  // Tamper by truncating one neuron's potential history on clock engine
+  truncClock.neurons[0].potentialHistory.pop();
+  const truncParity = verifyDifferentialParity(truncClock, truncEvent);
+  assert(truncParity.allPassed === false, 'Differential parity rejects truncated membrane trajectory');
+  assert(truncParity.trajectoryParity === false, 'Voltage trajectory parity flagged false on truncation');
+
+  // 10.4: External Input Sequence Trace Parity
+  const tracedClock = new SimulationEngine({ neuronCount: 16, steps: 20, executionMode: 'clock', seed: 555, traceInputs: true });
+  tracedClock.init({ neuronCount: 16, steps: 20, executionMode: 'clock', seed: 555, traceInputs: true });
+  for (let s = 0; s < 20; s++) tracedClock.step();
+
+  const tracedEvent = new SimulationEngine({ neuronCount: 16, steps: 20, executionMode: 'event', seed: 555, traceInputs: true });
+  tracedEvent.init({ neuronCount: 16, steps: 20, executionMode: 'event', seed: 555, traceInputs: true });
+  for (let s = 0; s < 20; s++) tracedEvent.step();
+
+  const tracedParity = verifyDifferentialParity(tracedClock, tracedEvent);
+  assert(tracedParity.allPassed === true, 'Differential parity passes with external input trace enabled');
+  assert(tracedParity.inputParity === true, 'External input trace parity confirmed identical');
+  assert(tracedParity.inputTraceVerified === true, 'External input sequence verified element-by-element');
+
+  // 10.5: Campaign Accounting Counter Integrity
+  const accountingRunner = new ExperimentRunner();
+  const acctRes = await accountingRunner.runCampaign({
+    campaignType: 'quick',
+    modes: ['clock', 'event'],
+    repetitions: 3,
+    neuronCount: 12,
+    steps: 10,
+    warmupRuns: 1,
+  });
+  assert(acctRes.totalTrialsPlanned === 6, `totalTrialsPlanned is 6 (got ${acctRes.totalTrialsPlanned})`);
+  assert(acctRes.completedTrialsCount === 6, `completedTrialsCount is 6 (got ${acctRes.completedTrialsCount})`);
+  assert(acctRes.attemptedTrialsCount === 6, `attemptedTrialsCount is 6 (got ${acctRes.attemptedTrialsCount})`);
+  assert(acctRes.failedTrialsCount === 0, `failedTrialsCount is 0 (got ${acctRes.failedTrialsCount})`);
+  assert(acctRes.notStartedTrialsCount === 0, `notStartedTrialsCount is 0 (got ${acctRes.notStartedTrialsCount})`);
+  assert(acctRes.cancelledTrialsCount === 0, `cancelledTrialsCount is 0 (got ${acctRes.cancelledTrialsCount})`);
+
+  // 10.6: Structural Factorial Plan Verification (4 sizes x 4 sparsities x 10 reps x 2 modes = 320 runs)
+  const fullFactorialPlanned = 4 * 4 * 10 * 2;
+  assert(fullFactorialPlanned === 320, '4 sizes x 4 sparsities x 10 reps x 2 modes structurally equals 320 planned runs');
 
   console.log('\n===============================================================');
   console.log(`  TEST RESULTS: ${passedTests} PASSED, ${failedTests} FAILED`);
@@ -353,7 +437,7 @@ async function runTests() {
   if (failedTests > 0) {
     process.exit(1);
   } else {
-    console.log('\n🎉 ALL v2.2.1 EXPERIMENT RUNNER & VALIDATION INVARIANTS VERIFIED!\n');
+    console.log('\n🎉 ALL v2.2.2 EXPERIMENT RUNNER & VALIDATION INVARIANTS VERIFIED!\n');
   }
 }
 

@@ -1,14 +1,48 @@
 # NEUROCORE — Adaptive Event-Driven Neuromorphic Computing Platform
 
-**Version:** v2.2.1  
+**Version:** v2.2.2  
 **Status:** Interactive Research Platform Prototype  
 **Live Deployment:** [https://neurocore-gilt.vercel.app/](https://neurocore-gilt.vercel.app/)  
 **Deployment Platform:** Vercel (Static Web Application)  
-**Mathematical Specification:** [docs/MATHEMATICAL_MODEL.md](docs/MATHEMATICAL_MODEL.md)
+**Mathematical Specification:** [docs/MATHEMATICAL_MODEL.md](docs/MATHEMATICAL_MODEL.md)  
+**Presentation Defense Brief:** [docs/PRESENTATION_BRIEF.md](docs/PRESENTATION_BRIEF.md)
 
 NEUROCORE is an interactive scientific computing and visualization platform for exploring event-driven Spiking Neural Networks (SNNs), adaptive neuromorphic computation policies, and hardware-aware edge profiling.
 
 > *"Intelligence that computes only when it matters."*
+
+---
+
+## What's New in v2.2.2 — Scientific Integrity, Final Validation & Presentation Readiness
+
+### 1. Presentation Defense Dossier & Academic Viva Guide
+- **Exhaustive Defense Brief:** Added [`docs/PRESENTATION_BRIEF.md`](docs/PRESENTATION_BRIEF.md) spanning 18 comprehensive sections: project metadata, problem formulation, biological motivation, discrete LIF equations, clock vs event comparison, geometric skip-sampling and lazy decay proofs, accounting invariants, Student's t statistical design, empirical results, hardware integration roadmap, a 7-step live demonstration sequence, and 16 technical viva questions and answers.
+
+### 2. Complete Scientific Model & Code Synchronization
+- **Leak Factor Alignment:** Synchronized default leak factor $\lambda = 0.78$ across mathematical documentation, neuron models, and test suites.
+- **Input Current Bounds:** Documented and verified stochastic input current distribution $I_i^{\text{ext}}(t) = 0.10 + 0.25 \cdot U_i' \in [0.10, 0.35)$.
+- **Global Population Adaptive Threshold:** Formalized the global population spike density rule $\rho(t) = \frac{1}{N} \sum S_i(t)$, modulating global threshold $\theta(t+1) = \min(\theta(t) + 0.05, 1.10)$ when $\rho > 0.15$ and $\max(\theta(t) - 0.03, 0.20)$ when $\rho < 0.05$.
+- **Adaptive Temporal Binning Semantics:** Accurately documented the 2-step accumulation and deferral policy when sparsity $\sigma \ge 0.65$ as an approximation policy.
+
+### 3. Granular Operation Counter Accounting
+- **Active Current Integrations (`activeIntegrations`):** Tracks instances where non-zero positive current ($I_i(t) > 0$) was actually accumulated into membrane potential, distinguished from general non-refractory evaluation cycles (`neuronIntegrations`).
+- **Lazy Decay Granularity:** Added `lazyDecayCalls` (total invocations of lazy decay) and `lazyExponentialEvaluations` (actual `Math.pow` calculations performed when $V \neq 0$ and $\Delta t \ge 1$), preserving `lazyDecayEvaluations` as backward-compatible alias.
+- **Deterministic Input Tracing:** Added optional `traceInputs` flag and `getInputTrace()` method to record exact `{ step, targetId, current }` tuples for element-by-element verification.
+
+### 4. Strict Full Differential Parity Protocol
+- **Strict Trajectory Integrity:** Replaced silent `Math.min()` length masking with strict length equality assertions ($|cHist| = cSteps = |eHist| = eSteps$), guaranteeing that truncated histories are immediately flagged as parity failures.
+- **Step Count Validation:** Rejects paired comparisons with mismatched step counts.
+- **Input Sequence Parity:** Element-by-element verification of stochastic sensory input arrival steps, target IDs, and amplitudes when input tracing is active.
+- **Campaign Parity Pill UI:** Displays `PARITY AUDIT: N/A` with dim styling when no paired trials are available.
+
+### 5. Robust Campaign Accounting & Statistical Invariants
+- **Six Mutually Exclusive Trial Counters:** Tracks `totalTrialsPlanned`, `attemptedTrialsCount`, `completedTrialsCount`, `failedTrialsCount`, `notStartedTrialsCount`, and `cancelledTrialsCount`. Incomplete or cancelled trials are strictly excluded from statistical summaries.
+- **Strict Array Invariants:** `pairedDifferences` and `pairedPercentageReductions` throw explicit Errors if array lengths differ, eliminating silent truncation.
+- **Student's t Critical Values Table:** Embeds exact values for $df \in [1, 40]$ and milestone entries up to $df=120$, with two-term Cornish-Fisher expansion for $df > 120$.
+
+### 6. Expanded Automated Validation Suite (176 Tests)
+- `test-simulation.js`: 72 automated tests verifying LIF dynamics, geometric sampling, lazy decay, synaptic conservation invariants, adaptive policies, granular counters, and input tracing.
+- `test-experiments.js`: 104 automated tests verifying sample statistics, Student's t critical values, 95% CIs, paired differences, diagnostic sensitivity, strict parity validation, factorial campaign execution, cancellation, and CSV/JSON serialization.
 
 ---
 

@@ -1,5 +1,5 @@
 /**
- * NEUROCORE v2.2.1 — Comprehensive SNN Simulation Engine Automated Test Suite
+ * NEUROCORE v2.2.2 — Comprehensive SNN Simulation Engine Automated Test Suite
  *
  * Verifies:
  * - Suite A: LIF Neuron Model Dynamics & Invariants (leakage, thresholds, refractory, ceilings)
@@ -8,6 +8,7 @@
  * - Suite D: Conservation Invariant: Scheduled = Delivered + Pending
  * - Suite E: Deterministic Reproducibility with Seeded PRNG
  * - Suite F: Adaptive Policies Validation (Threshold adaptation bounds, temporal binning)
+ * - Suite G: v2.2.2 Scientific Integrity Invariants (Counters, input tracing, default parameters)
  */
 
 const { SimulationEngine, LIFNeuron, SynapticConnection, EventQueue, SeededPRNG } = require('./simulation-engine.js');
@@ -32,7 +33,7 @@ function assertClose(a, b, epsilon = 1e-6, message = '') {
 }
 
 console.log('===============================================================');
-console.log('  NEUROCORE v2.2.1 AUTOMATED SIMULATION ENGINE TEST SUITE');
+console.log('  NEUROCORE v2.2.2 AUTOMATED SIMULATION ENGINE TEST SUITE');
 console.log('===============================================================\n');
 
 // ════════════════════════════════════════════════════════════════
@@ -335,6 +336,71 @@ console.log('\n--- SUITE F: Adaptive Policies Validation ---');
   // Characterize that adaptive temporal binning is an approximation policy
   engine.reset();
   assert(engine.binSizeHistory.length === 0, 'F2.3: Reset clears temporal binning state');
+}
+
+// ════════════════════════════════════════════════════════════════
+// SUITE G: v2.2.2 SCIENTIFIC INTEGRITY INVARIANTS
+// ════════════════════════════════════════════════════════════════
+console.log('\n--- SUITE G: v2.2.2 Scientific Integrity Invariants ---');
+
+// G1: Engine Version & Default Parameter Audit
+{
+  assert(SimulationEngine.VERSION === '2.2.2-validated', `G1.1: SimulationEngine.VERSION is 2.2.2-validated (${SimulationEngine.VERSION})`);
+  const defaultNeuron = new LIFNeuron(0);
+  assertClose(defaultNeuron.leakFactor, 0.78, 1e-9, `G1.2: LIFNeuron default leakFactor is 0.78 (${defaultNeuron.leakFactor})`);
+}
+
+// G2: Granular Counter Auditing (activeIntegrations, lazyDecayCalls, lazyExponentialEvaluations)
+{
+  const clockEng = new SimulationEngine({
+    neuronCount: 16,
+    steps: 20,
+    executionMode: 'clock',
+    seed: 101,
+  });
+  clockEng.init({ neuronCount: 16, steps: 20, executionMode: 'clock', seed: 101 });
+  for (let s = 0; s < 20; s++) clockEng.step();
+
+  assert(clockEng.clockEvaluations === 16 * 20, `G2.1: Clock evaluations equals N x T = 320 (${clockEng.clockEvaluations})`);
+  assert(clockEng.lazyDecayCalls === 0, `G2.2: Clock mode lazyDecayCalls is strictly 0 (${clockEng.lazyDecayCalls})`);
+  assert(clockEng.lazyExponentialEvaluations === 0, `G2.3: Clock mode lazyExponentialEvaluations is strictly 0 (${clockEng.lazyExponentialEvaluations})`);
+  assert(clockEng.activeIntegrations <= clockEng.neuronIntegrations, `G2.4: Active integrations (${clockEng.activeIntegrations}) <= total integrations (${clockEng.neuronIntegrations})`);
+
+  const eventEng = new SimulationEngine({
+    neuronCount: 16,
+    steps: 20,
+    executionMode: 'event',
+    seed: 101,
+  });
+  eventEng.init({ neuronCount: 16, steps: 20, executionMode: 'event', seed: 101 });
+  for (let s = 0; s < 20; s++) eventEng.step();
+
+  assert(eventEng.clockEvaluations === 0, `G2.5: Event mode clock evaluations is strictly 0 (${eventEng.clockEvaluations})`);
+  assert(eventEng.lazyDecayCalls > 0, `G2.6: Event mode lazyDecayCalls is tracked (${eventEng.lazyDecayCalls})`);
+  assert(eventEng.lazyExponentialEvaluations <= eventEng.lazyDecayCalls, `G2.7: Lazy exponential evaluations (${eventEng.lazyExponentialEvaluations}) <= lazy decay calls (${eventEng.lazyDecayCalls})`);
+  assert(eventEng.activeIntegrations <= eventEng.neuronIntegrations, `G2.8: Active integrations (${eventEng.activeIntegrations}) <= neuron integrations (${eventEng.neuronIntegrations})`);
+}
+
+// G3: Input Tracing & Current Bounds [0.10, 0.35)
+{
+  const tracedEng = new SimulationEngine({
+    neuronCount: 12,
+    steps: 15,
+    traceInputs: true,
+    inputSparsity: 0.5,
+    seed: 777,
+  });
+  tracedEng.init({ neuronCount: 12, steps: 15, traceInputs: true, inputSparsity: 0.5, seed: 777 });
+  for (let s = 0; s < 15; s++) tracedEng.step();
+
+  const trace = tracedEng.getInputTrace();
+  assert(trace.length > 0, `G3.1: Input trace captured ${trace.length} stochastic inputs`);
+  const allInRange = trace.every(e => e.current >= 0.10 && e.current < 0.35);
+  assert(allInRange, 'G3.2: All external input currents lie strictly within [0.10, 0.35)');
+  assert(trace.every(e => e.step >= 0 && e.step < 15 && e.targetId >= 0 && e.targetId < 12), 'G3.3: Trace step and targetId indices are strictly valid');
+
+  tracedEng.reset();
+  assert(tracedEng.getInputTrace().length === 0, 'G3.4: Reset clears input trace');
 }
 
 console.log('\n===============================================================');

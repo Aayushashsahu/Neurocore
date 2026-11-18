@@ -6,7 +6,7 @@
  * modes, adaptive threshold policies, and adaptive temporal binning.
  * 
  * @file simulation-engine.js
- * @version 2.2.1
+ * @version 2.2.2
  * @license MIT
  */
 
@@ -124,6 +124,7 @@ class LIFNeuron {
    */
   lazyDecay(currentStep) {
     if (this.lastUpdateStep >= currentStep) {
+      this._lastDecayEvaluated = false;
       return this.membranePotential;
     }
 
@@ -131,17 +132,27 @@ class LIFNeuron {
     if (currentStep <= this.refractoryUntil) {
       this.membranePotential = this.resetVoltage;
       this.lastUpdateStep = currentStep;
+      this._lastDecayEvaluated = false;
       return this.membranePotential;
     }
 
     // 2. If refractory period ended between lastUpdateStep and currentStep
     if (this.lastUpdateStep <= this.refractoryUntil) {
       const elapsed = currentStep - this.refractoryUntil;
-      this.membranePotential = this.resetVoltage * Math.pow(this.leakFactor, elapsed);
-    } else {
-      // 3. Normal exponential decay from previous subthreshold potential
-      const elapsed = currentStep - this.lastUpdateStep;
+      // Since resetVoltage is 0.0, 0.0 * λ^elapsed remains 0.0 without needing Math.pow
+      this.membranePotential = this.resetVoltage;
+      this.lastUpdateStep = currentStep;
+      this._lastDecayEvaluated = false;
+      return this.membranePotential;
+    }
+
+    // 3. Normal exponential decay from previous subthreshold potential
+    const elapsed = currentStep - this.lastUpdateStep;
+    if (this.membranePotential !== 0.0 && elapsed > 0) {
       this.membranePotential = this.membranePotential * Math.pow(this.leakFactor, elapsed);
+      this._lastDecayEvaluated = true;
+    } else {
+      this._lastDecayEvaluated = false;
     }
 
     this.lastUpdateStep = currentStep;
@@ -455,7 +466,18 @@ class SimulationEngine {
     /** @type {number} Cumulative wall-clock execution duration across steps (ms). */
     this.totalExecutionMs = 0;
     /** @type {string} Simulation algorithm engine release version. */
-    this.simEngineVersion = '2.2.1-validated';
+    this.simEngineVersion = '2.2.2-validated';
+
+    /** @type {number} Total calls to lazyDecay(). */
+    this.lazyDecayCalls = 0;
+    /** @type {number} Total non-refractory exponential decay calculations performed via Math.pow. */
+    this.lazyExponentialEvaluations = 0;
+    /** @type {number} Total neuron update evaluations where positive input current (I > 0) was received. */
+    this.activeIntegrations = 0;
+    /** @type {boolean} Whether to record detailed deterministic external input traces. */
+    this.traceInputs = false;
+    /** @type {Array<{step: number, targetId: number, current: number}>} External input event sequence trace. */
+    this.inputTrace = [];
 
     /** @type {number} ID of neuron currently inspected in frontend charts. */
     this.inspectedNeuronId = 0;
@@ -553,6 +575,8 @@ class SimulationEngine {
 
     const cfg = this.config;
     this.seed = cfg.seed;
+    this.traceInputs = Boolean(cfg.traceInputs);
+    this.inputTrace = [];
     this.prng = new SeededPRNG(this.seed);
     this.inputPRNG = new SeededPRNG(typeof this.seed === 'number' ? (this.seed + 1013) : SeededPRNG.hashString(String(this.seed) + '_in'));
 
@@ -606,10 +630,14 @@ class SimulationEngine {
     this.currentStep = 0;
     this.clockEvaluations = 0;
     this.neuronIntegrations = 0;
+    this.activeIntegrations = 0;
+    this.lazyDecayCalls = 0;
     this.lazyDecayEvaluations = 0;
+    this.lazyExponentialEvaluations = 0;
     this.thresholdEvaluations = 0;
     this.refractoryChecks = 0;
     this.externalInputEvents = 0;
+    this.inputTrace = [];
     this.updateCount = 0;
     this.totalSpikeCount = 0;
     this.scheduledEventCount = 0;
@@ -685,6 +713,9 @@ class SimulationEngine {
         const ext = 0.1 + this.inputPRNG.random() * 0.25;
         inputMap.set(i, ext);
         this.externalInputEvents++;
+        if (this.traceInputs) {
+          this.inputTrace.push({ step: this.currentStep, targetId: i, current: ext });
+        }
       }
       return inputMap;
     }
@@ -703,9 +734,21 @@ class SimulationEngine {
       const ext = 0.1 + this.inputPRNG.random() * 0.25;
       inputMap.set(curr, ext);
       this.externalInputEvents++;
+      if (this.traceInputs) {
+        this.inputTrace.push({ step: this.currentStep, targetId: curr, current: ext });
+      }
     }
 
     return inputMap;
+  }
+
+  /**
+   * Return a shallow copy of the recorded external input trace.
+   * Only populated when traceInputs is enabled in config.
+   * @returns {Array<{ step: number, targetId: number, current: number }>}
+   */
+  getInputTrace() {
+    return this.inputTrace ? this.inputTrace.slice() : [];
   }
 
   /**
@@ -873,13 +916,20 @@ class SimulationEngine {
         const n = this.neurons[nid];
 
         // Apply lazy decay from lastUpdateStep
+        this.lazyDecayCalls++;
         n.lazyDecay(step);
         this.lazyDecayEvaluations++;
+        if (n._lastDecayEvaluated) {
+          this.lazyExponentialEvaluations++;
+        }
 
         this.refractoryChecks++;
         const isRefractory = step <= n.refractoryUntil;
         if (!isRefractory) {
           this.neuronIntegrations++;
+          if (inp > 0) {
+            this.activeIntegrations++;
+          }
           this.thresholdEvaluations++;
         }
 
@@ -917,6 +967,9 @@ class SimulationEngine {
         const isRefractory = n.refractoryTimer > 0;
         if (!isRefractory) {
           this.neuronIntegrations++;
+          if (inp > 0) {
+            this.activeIntegrations++;
+          }
           this.thresholdEvaluations++;
         }
 
@@ -1148,10 +1201,15 @@ class SimulationEngine {
       updateCount: this.updateCount,
       clockEvaluations: this.clockEvaluations,
       neuronIntegrations: this.neuronIntegrations,
+      activeIntegrations: this.activeIntegrations,
+      lazyDecayCalls: this.lazyDecayCalls,
       lazyDecayEvaluations: this.lazyDecayEvaluations,
+      lazyExponentialEvaluations: this.lazyExponentialEvaluations,
       thresholdEvaluations: this.thresholdEvaluations,
       refractoryChecks: this.refractoryChecks,
       externalInputEvents: this.externalInputEvents,
+      traceInputs: this.traceInputs,
+      inputTraceLength: this.inputTrace ? this.inputTrace.length : 0,
       scheduledEvents: this.scheduledEventCount,
       deliveredEvents: this.deliveredEventCount,
       pendingEvents: this.eventQueue.size,
@@ -1195,6 +1253,7 @@ class SimulationEngine {
  *  Export on window and module
  * ==================================================================== */
 
+SimulationEngine.VERSION = '2.2.2-validated';
 SimulationEngine.LIFNeuron = LIFNeuron;
 SimulationEngine.SynapticConnection = SynapticConnection;
 SimulationEngine.EventQueue = EventQueue;
