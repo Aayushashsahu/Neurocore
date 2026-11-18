@@ -86,10 +86,12 @@ class VizInstance {
   /**
    * @param {HTMLElement} container DOM container
    * @param {'hero'|'sim'} mode 'hero' or 'sim'
+   * @param {object} [initialTopology=null]
    */
-  constructor(container, mode) {
+  constructor(container, mode, initialTopology = null) {
     this.container = container;
     this.mode = mode;
+    this._initialTopology = initialTopology;
     this.disposed = false;
     this.visible = true;
     this.paused = false;
@@ -100,8 +102,10 @@ class VizInstance {
 
     /** @type {THREE.Mesh[]} */
     this.neurons = [];
-    /** @type {{ line: THREE.Line, from: THREE.Mesh, to: THREE.Mesh, highlight: boolean, weight: number }[]} */
+    /** @type {{ line: THREE.Line, from: THREE.Mesh, to: THREE.Mesh, sourceId: number, targetId: number, highlight: boolean, weight: number }[]} */
     this.connections = [];
+    /** @type {Map<number, Array<{ line: THREE.Line, from: THREE.Mesh, to: THREE.Mesh, sourceId: number, targetId: number, highlight: boolean, weight: number }>>} */
+    this._outgoingMap = new Map();
     /** @type {{ mesh: THREE.Mesh, from: THREE.Vector3, to: THREE.Vector3, t: number, speed: number, targetNeuron: THREE.Mesh|null }[]} */
     this.particles = [];
 
@@ -201,6 +205,11 @@ class VizInstance {
     };
     window.addEventListener('resize', this._onResize);
 
+    if (window.ResizeObserver) {
+      this._resizeObserver = new ResizeObserver(() => this._onResize());
+      this._resizeObserver.observe(this.container);
+    }
+
     // IntersectionObserver (pause rendering when container scrolled out of view)
     this._observer = new IntersectionObserver(([entry]) => {
       this.visible = entry.isIntersecting;
@@ -229,7 +238,7 @@ class VizInstance {
     if (this.mode === 'hero') {
       this._buildHeroClusteredTopology();
     } else {
-      this._buildSimLabTopology();
+      this._buildSimLabTopology(this._initialTopology);
     }
   }
 
@@ -350,14 +359,59 @@ class VizInstance {
   }
 
   /**
-   * Simulation Lab Topology: 3 functional layers/clusters mapped to the SNN simulation engine.
+   * Rebuilds Simulation Lab topology dynamically with actual engine neuron count and connections.
+   * @param {object} [topology=null]
    */
-  _buildSimLabTopology() {
-    const neuronCount = 36;
+  setTopology(topology) {
+    if (this.disposed || this.mode !== 'sim') return;
+    this._initialTopology = topology;
+    this._buildSimLabTopology(topology);
+  }
+
+  /**
+   * Simulation Lab Topology: 3 functional layers/clusters mapped directly to the actual SNN simulation engine.
+   * Uses actual engine neuron count and actual directed synaptic connections.
+   * @param {object} [topology=null]
+   */
+  _buildSimLabTopology(topology = null) {
+    // Clean up previous elements
+    this.neurons.forEach(n => {
+      this.scene.remove(n);
+      n.geometry?.dispose();
+      n.material?.dispose();
+    });
+    this.neurons = [];
+
+    this.connections.forEach(c => {
+      this.scene.remove(c.line);
+      c.line.geometry?.dispose();
+      c.line.material?.dispose();
+    });
+    this.connections = [];
+
+    this.particles.forEach(p => {
+      this.scene.remove(p.mesh);
+      p.mesh.geometry?.dispose();
+      p.mesh.material?.dispose();
+    });
+    this.particles = [];
+    this._outgoingMap.clear();
+
+    const count = topology?.neuronCount || 48;
+    const connections = topology?.connections || [];
+
+    // Deterministic distribution across 3 functional cortical clusters:
+    // Cluster 0: Sensory / Input layer (left, ~28%)
+    // Cluster 1: Associative Neuromorphic Core (center, ~48%)
+    // Cluster 2: Spike Output Hub (right, ~24%)
+    const nSensory = Math.max(2, Math.floor(count * 0.28));
+    const nOutput = Math.max(2, Math.floor(count * 0.24));
+    const nCore = count - nSensory - nOutput;
+
     const clusterDef = [
-      { center: new THREE.Vector3(-4.0, 0, 0), count: 10, radius: 2.0 },
-      { center: new THREE.Vector3(0.0, 0.2, 0.2), count: 18, radius: 2.8 },
-      { center: new THREE.Vector3(4.0, 0, 0), count: 8, radius: 1.8 },
+      { center: new THREE.Vector3(-4.0, 0, -0.2), count: nSensory, radius: 2.0 },
+      { center: new THREE.Vector3(0.0, 0.2, 0.3),  count: nCore,    radius: 2.7 },
+      { center: new THREE.Vector3(4.0, 0, -0.2),  count: nOutput,  radius: 1.9 },
     ];
 
     let globalIndex = 0;
@@ -365,9 +419,11 @@ class VizInstance {
 
     clusterDef.forEach((cl, cIdx) => {
       for (let i = 0; i < cl.count; i++) {
-        const phi = Math.acos(2 * Math.random() - 1);
-        const theta = Math.random() * Math.PI * 2;
-        const r = Math.pow(Math.random(), 0.6) * cl.radius;
+        // Spherical golden spiral for deterministic, uniform spatial distribution
+        const phi = Math.acos(1 - 2 * (i + 0.5) / cl.count);
+        const theta = Math.PI * (1 + Math.sqrt(5)) * (i + 0.5);
+        const rFrac = 0.35 + 0.65 * Math.sqrt((i + 1) / cl.count);
+        const r = rFrac * cl.radius;
 
         const pos = new THREE.Vector3(
           cl.center.x + r * Math.sin(phi) * Math.cos(theta),
@@ -392,7 +448,7 @@ class VizInstance {
           id: globalIndex,
           clusterId: cIdx,
           isHub,
-          baseRadius: isHub ? 0.55 : 0.35,
+          baseRadius: isHub ? 0.55 : (i % 2 === 0 ? 0.42 : 0.3),
           baseEmissive: 0.12,
           active: false,
           activationTimer: 0,
@@ -405,28 +461,68 @@ class VizInstance {
       }
     });
 
-    // Clean intra & inter connections
-    clusterNodes.forEach((nodes, cIdx) => {
-      nodes.forEach((nA) => {
-        nodes.forEach((nB) => {
-          if (nA.userData.id < nB.userData.id && nA.position.distanceTo(nB.position) < 2.5) {
-            this._addSynapticConnection(nA, nB, false, 0.4);
-          }
-        });
-      });
+    // Build actual directed synaptic connections from engine topology
+    if (connections.length > 0) {
+      connections.forEach(conn => {
+        const nA = this.neurons[conn.sourceId];
+        const nB = this.neurons[conn.targetId];
+        if (!nA || !nB) return;
 
-      if (cIdx < 2) {
-        const nextNodes = clusterNodes[cIdx + 1];
-        nodes.slice(0, 3).forEach(nA => {
-          const closest = nextNodes
-            .map(nB => ({ nB, dist: nA.position.distanceTo(nB.position) }))
-            .sort((a, b) => a.dist - b.dist)[0];
-          if (closest) {
-            this._addSynapticConnection(nA, closest.nB, true, 0.75);
-          }
+        const isFeedback = conn.sourceId >= conn.targetId;
+        const highlight = conn.weight > 0.35 || isFeedback;
+
+        const mat = new THREE.LineBasicMaterial({
+          color: isFeedback ? COLORS.violet : (highlight ? COLORS.connActive : COLORS.connection),
+          transparent: true,
+          opacity: highlight ? 0.45 : 0.22,
+          linewidth: 1,
         });
-      }
-    });
+
+        const geometry = new THREE.BufferGeometry().setFromPoints([nA.position, nB.position]);
+        const line = new THREE.Line(geometry, mat);
+        this.scene.add(line);
+
+        const connObj = {
+          line,
+          from: nA,
+          to: nB,
+          sourceId: conn.sourceId,
+          targetId: conn.targetId,
+          weight: conn.weight,
+          delay: conn.delay,
+          highlight,
+        };
+        this.connections.push(connObj);
+
+        if (!this._outgoingMap.has(conn.sourceId)) {
+          this._outgoingMap.set(conn.sourceId, []);
+        }
+        this._outgoingMap.get(conn.sourceId).push(connObj);
+      });
+    } else {
+      // Clean nearest neighbor fallback if no connections array provided
+      clusterNodes.forEach((nodes, cIdx) => {
+        nodes.forEach(nA => {
+          nodes.forEach(nB => {
+            if (nA.userData.id < nB.userData.id && nA.position.distanceTo(nB.position) < 2.5) {
+              this._addSynapticConnection(nA, nB, false, 0.4);
+            }
+          });
+        });
+
+        if (cIdx < 2) {
+          const nextNodes = clusterNodes[cIdx + 1];
+          nodes.slice(0, 3).forEach(nA => {
+            const closest = nextNodes
+              .map(nB => ({ nB, dist: nA.position.distanceTo(nB.position) }))
+              .sort((a, b) => a.dist - b.dist)[0];
+            if (closest) {
+              this._addSynapticConnection(nA, closest.nB, true, 0.75);
+            }
+          });
+        }
+      });
+    }
   }
 
   /**
@@ -443,7 +539,21 @@ class VizInstance {
     const geometry = new THREE.BufferGeometry().setFromPoints([nA.position, nB.position]);
     const line = new THREE.Line(geometry, mat);
     this.scene.add(line);
-    this.connections.push({ line, from: nA, to: nB, highlight, weight });
+    const connObj = {
+      line,
+      from: nA,
+      to: nB,
+      sourceId: nA.userData.id,
+      targetId: nB.userData.id,
+      highlight,
+      weight,
+    };
+    this.connections.push(connObj);
+
+    if (!this._outgoingMap.has(nA.userData.id)) {
+      this._outgoingMap.set(nA.userData.id, []);
+    }
+    this._outgoingMap.get(nA.userData.id).push(connObj);
   }
 
   /**
@@ -606,12 +716,20 @@ class VizInstance {
         // Neuron spiked: bright cyan illumination + pulse
         this._activateNeuron(n, 1.2);
 
-        // Spawn a spike pulse along outgoing synapses
-        const outConnections = this.connections.filter(c => c.from === n || c.to === n);
-        outConnections.slice(0, 2).forEach(c => {
-          const target = c.from === n ? c.to : c.from;
-          this._addTravelingParticle(n.position, target.position, c.highlight, target);
-        });
+        // Spawn a spike pulse strictly along actual directed outgoing synapses
+        const outgoing = this._outgoingMap.get(i);
+        if (outgoing && outgoing.length > 0) {
+          const selected = outgoing.length <= 3
+            ? outgoing
+            : outgoing.slice().sort((a, b) => b.weight - a.weight).slice(0, 3);
+
+          for (const c of selected) {
+            if (this.particles.length < 80) {
+              // Directional: From n (source) to c.to (target)
+              this._addTravelingParticle(n.position, c.to.position, c.highlight, c.to);
+            }
+          }
+        }
       } else if (activeSet.has(i)) {
         // High membrane potential: warm glow
         n.userData.active = true;
@@ -699,6 +817,10 @@ class VizInstance {
     if (this.animationId) cancelAnimationFrame(this.animationId);
     clearTimeout(this.idleTimer);
     window.removeEventListener('resize', this._onResize);
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+      this._resizeObserver = null;
+    }
     this.container.removeEventListener('mousemove', this._onMouseMove);
     if (this._observer) this._observer.disconnect();
 
@@ -735,6 +857,7 @@ class VizInstance {
 
 let heroViz = null;
 let simViz = null;
+let pendingSimTopology = null;
 
 function initHeroViz(container) {
   if (!container) return null;
@@ -747,15 +870,23 @@ function initHeroViz(container) {
   return heroViz;
 }
 
-function initSimViz(container) {
+function initSimViz(container, initialTopology = null) {
   if (!container) return null;
   if (!hasWebGL()) {
     insertFallbackSVG(container);
     return null;
   }
+  const topo = initialTopology || pendingSimTopology;
   if (simViz) simViz.dispose();
-  simViz = new VizInstance(container, 'sim');
+  simViz = new VizInstance(container, 'sim', topo);
   return simViz;
+}
+
+function setSimTopology(topology) {
+  pendingSimTopology = topology;
+  if (simViz) {
+    simViz.setTopology(topology);
+  }
 }
 
 function updateSimViz(neuronStates) {
@@ -796,6 +927,7 @@ function disposeViz() {
 window.NeuroViz = {
   initHeroViz,
   initSimViz,
+  setSimTopology,
   updateSimViz,
   resetCamera,
   toggleAutoRotate,
@@ -813,6 +945,7 @@ try {
 export {
   initHeroViz,
   initSimViz,
+  setSimTopology,
   updateSimViz,
   resetCamera,
   toggleAutoRotate,

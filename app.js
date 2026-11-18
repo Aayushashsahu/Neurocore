@@ -108,6 +108,9 @@
     if (window.NeuroViz && typeof window.NeuroViz.initSimViz === 'function') {
       window.NeuroViz.initSimViz(container);
       sim3DInitialized = true;
+      if (simEngine && typeof window.NeuroViz.setSimTopology === 'function') {
+        window.NeuroViz.setSimTopology(simEngine.getTopology());
+      }
     } else if (simRetries < 25) {
       simRetries++;
       setTimeout(initSim3D, 120);
@@ -152,12 +155,37 @@
     adaptiveThreshold: false,
     adaptiveTemporal: false,
     speedMultiplier: 1.0,
+    seed: 42,
   };
+
+  /**
+   * Updates dynamic workstation runtime status indicator badge
+   * @param {'IDLE'|'RUNNING'|'PAUSED'|'COMPLETED'} status
+   */
+  function setSimStatus(status) {
+    const badge = $('#simStatusBadge');
+    if (!badge) return;
+    badge.className = 'sw-badge';
+    if (status === 'RUNNING') {
+      badge.classList.add('status-live');
+      badge.innerHTML = '<span class="pulse-dot"></span> SNN RUNNING';
+    } else if (status === 'PAUSED') {
+      badge.classList.add('status-paused');
+      badge.innerHTML = '<span class="pause-dot">❚❚</span> SNN PAUSED';
+    } else if (status === 'COMPLETED') {
+      badge.classList.add('status-complete');
+      badge.innerHTML = '<span class="check-dot">✓</span> SNN COMPLETED';
+    } else {
+      badge.classList.add('status-idle');
+      badge.innerHTML = '<span class="idle-dot">○</span> SNN IDLE';
+    }
+  }
 
   /**
    * Initializes or re-configures the simulation engine and charts
    */
   function initSimulation() {
+    let topo = null;
     // Instantiate or reconfigure SimulationEngine
     if (window.SimulationEngine) {
       const engineOpts = {
@@ -167,9 +195,16 @@
         executionMode: simConfig.mode,
         adaptiveThreshold: simConfig.adaptiveThreshold,
         adaptiveTemporal: simConfig.adaptiveTemporal,
+        seed: simConfig.seed,
       };
       simEngine = new window.SimulationEngine(engineOpts);
       simEngine.init(engineOpts);
+      topo = simEngine.getTopology();
+
+      // Synchronize 3D Neural Mesh with actual engine topology
+      if (window.NeuroViz && typeof window.NeuroViz.setSimTopology === 'function') {
+        window.NeuroViz.setSimTopology(topo);
+      }
     }
 
     // Initialize scientific charts if not already created
@@ -190,6 +225,11 @@
       if (mapCanvas && !activityMap && window.NeuroCharts.NeuralActivityMap) {
         activityMap = new window.NeuroCharts.NeuralActivityMap(mapCanvas);
       }
+    }
+
+    // Synchronize 2D Neural Activity Map with actual engine topology
+    if (activityMap && topo && typeof activityMap.setTopology === 'function') {
+      activityMap.setTopology(topo);
     }
 
     populateNeuronSelector();
@@ -238,6 +278,16 @@
     $('#sparsityOut').textContent = `${simConfig.sparsity}%`;
     $('#thresholdOut').textContent = Number(simConfig.threshold).toFixed(2);
     $('#stepsOut').textContent = `${simConfig.steps} steps`;
+
+    const seedInput = $('#experimentSeed');
+    if (seedInput && parseInt(seedInput.value, 10) !== simConfig.seed) {
+      seedInput.value = simConfig.seed;
+    }
+    const hashDisp = $('#seedHashDisplay');
+    if (hashDisp) {
+      const hex = '0x' + (Number(simConfig.seed) >>> 0).toString(16).toUpperCase().padStart(8, '0');
+      hashDisp.textContent = hex;
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -291,7 +341,10 @@
       const neuronSpikeTimes = (state.spikeRaster[selectedNeuronId] || []).filter(t => t <= state.step);
       membraneChart.update({
         potentials: neuronHistory,
-        threshold: simConfig.threshold,
+        threshold: state.currentThreshold ?? simConfig.threshold,
+        currentThreshold: state.currentThreshold,
+        thresholdHistory: state.thresholdHistory,
+        adaptiveThreshold: simConfig.adaptiveThreshold,
         resetVoltage: 0.0,
         spikeTimes: neuronSpikeTimes,
         currentStep: state.step,
@@ -322,7 +375,7 @@
         currentStep: state.step,
       });
       const recentRate = state.spikeFrequency.length > 0 ? state.spikeFrequency[state.spikeFrequency.length - 1] : 0;
-      $('#activityRate').textContent = `${recentRate} HZ`;
+      $('#activityRate').textContent = `${recentRate} SPIKES/STEP`;
       const actRateTag = $('#activityRateTag');
       if (actRateTag) actRateTag.textContent = `${recentRate} SPIKES/STEP`;
     }
@@ -349,19 +402,20 @@
     if (inactEl) inactEl.textContent = state.inactiveCount.toLocaleString();
     $('#densityMetric').textContent = `${densityPct.toFixed(1)}%`;
     const simTimeEl = $('#metricSimTime');
-    if (simTimeEl) simTimeEl.textContent = `T+${String(state.step).padStart(2, '0')} ms`;
+    if (simTimeEl) simTimeEl.textContent = `Step ${String(state.step).padStart(2, '0')} (T+${state.step}.0 ms)`;
 
-    // Right column activity distribution & metrics
+    // Right column activity distribution & genuine metrics
     const fireRateEl = $('#firingRateMetric');
     if (fireRateEl) fireRateEl.textContent = `${recentSpikeRate} spikes/step`;
     const activePct = Math.min(100, Math.round((state.activeCount / Math.max(1, simConfig.neuronCount)) * 100));
     const distFill = $('#activityDistFill');
     if (distFill) distFill.style.width = `${activePct}%`;
     const synEventsEl = $('#synapticEventsMetric');
-    if (synEventsEl) synEventsEl.textContent = `${(state.spikeCount * 4).toLocaleString()} ops`;
+    if (synEventsEl) synEventsEl.textContent = `${state.deliveredEvents.toLocaleString()} delivered`;
+    const schedEventsEl = $('#scheduledEventsMetric');
+    if (schedEventsEl) schedEventsEl.textContent = `${state.scheduledEvents.toLocaleString()} scheduled`;
     const queueSizeEl = $('#queueSizeMetric');
-    const queueLen = simEngine.eventQueue ? (simEngine.eventQueue.size ?? simEngine.eventQueue._heap?.length ?? (simEngine.eventQueue.events ? simEngine.eventQueue.events.length : 0)) : 0;
-    if (queueSizeEl) queueSizeEl.textContent = `${queueLen} PENDING`;
+    if (queueSizeEl) queueSizeEl.textContent = `${state.pendingEvents} PENDING`;
 
     // 7. Update Frame and Status
     $('#networkFrame').textContent = `STEP ${String(state.step).padStart(2, '0')}`;
@@ -390,7 +444,10 @@
       const neuronSpikeTimes = (state.spikeRaster[selectedNeuronId] || []).filter(t => t <= state.step);
       membraneChart.update({
         potentials: neuronHistory,
-        threshold: simConfig.threshold,
+        threshold: state.currentThreshold ?? simConfig.threshold,
+        currentThreshold: state.currentThreshold,
+        thresholdHistory: state.thresholdHistory,
+        adaptiveThreshold: simConfig.adaptiveThreshold,
         resetVoltage: 0.0,
         spikeTimes: neuronSpikeTimes,
         currentStep: state.step,
@@ -439,13 +496,14 @@
       $('#canvasPlaceholder')?.classList.add('hidden');
       $('#eventLog').innerHTML = '';
       $('#logCount').textContent = '0 EVENTS';
-      addLog(0, 'INIT', `${simConfig.neuronCount} LIF neurons · ${simConfig.mode.toUpperCase()} mode`);
+      addLog(0, 'INIT', `${simConfig.neuronCount} LIF neurons · ${simConfig.mode.toUpperCase()} mode · Seed ${simConfig.seed}`);
       addLog(0, 'CONFIG', `Vth=${simConfig.threshold.toFixed(2)}, Sparsity=${simConfig.sparsity}%`);
     }
 
     isSimRunning = true;
     isSimPaused = false;
     updatePlaybackButtons(true, false);
+    setSimStatus('RUNNING');
 
     function loop() {
       if (!isSimRunning || isSimPaused) return;
@@ -457,6 +515,7 @@
         isSimRunning = false;
         isSimPaused = false;
         updatePlaybackButtons(false, false);
+        setSimStatus('COMPLETED');
         $('#networkStatus').textContent = 'Simulation complete';
         addLog(targetTotalSteps, 'DONE', 'Simulation completed successfully.');
         toast('Simulation completed.');
@@ -471,12 +530,14 @@
     clearTimeout(simIntervalId);
     isSimPaused = true;
     updatePlaybackButtons(true, true);
+    setSimStatus('PAUSED');
     $('#networkStatus').textContent = 'Simulation paused';
     toast('Simulation paused.');
   }
 
   function resumeSimulation() {
     if (!isSimRunning || !isSimPaused) return;
+    setSimStatus('RUNNING');
     $('#networkStatus').textContent = 'Simulation resumed';
     toast('Simulation resumed.');
     startSimulationLoop();
@@ -490,7 +551,8 @@
       initSimulation();
       $('#canvasPlaceholder')?.classList.add('hidden');
     }
-    executeSimulationStep();
+    const hasMore = executeSimulationStep();
+    setSimStatus(hasMore ? 'PAUSED' : 'COMPLETED');
     toast('Stepped 1 interval.');
   }
 
@@ -499,6 +561,7 @@
     isSimRunning = false;
     isSimPaused = false;
     updatePlaybackButtons(false, false);
+    setSimStatus('IDLE');
 
     $('#networkStatus').textContent = 'Awaiting execution';
     $('#networkFrame').textContent = 'STEP 00';
@@ -514,6 +577,8 @@
     if (distFill) distFill.style.width = '0%';
     const synEventsEl = $('#synapticEventsMetric');
     if (synEventsEl) synEventsEl.textContent = '—';
+    const schedEventsEl = $('#scheduledEventsMetric');
+    if (schedEventsEl) schedEventsEl.textContent = '—';
     const queueSizeEl = $('#queueSizeMetric');
     if (queueSizeEl) queueSizeEl.textContent = '0 PENDING';
 
@@ -546,6 +611,93 @@
   }
 
   // Event Listeners for Simulation Controls
+  $('#experimentSeed')?.addEventListener('input', e => {
+    const val = parseInt(e.target.value, 10);
+    if (!isNaN(val) && val >= 0) {
+      simConfig.seed = val;
+      syncControlOutputs();
+      initSimulation();
+      toast(`Experiment seed set to ${simConfig.seed}.`);
+    }
+  });
+
+  $('#randomSeedBtn')?.addEventListener('click', () => {
+    simConfig.seed = Math.floor(Math.random() * 900000) + 100000;
+    syncControlOutputs();
+    initSimulation();
+    toast(`Generated new random seed: ${simConfig.seed}`);
+  });
+
+  // Export Experiment Configuration & Metadata (JSON)
+  function exportExperimentJSON() {
+    if (!simEngine) return;
+    const state = simEngine.getState();
+    const topo = simEngine.getTopology ? simEngine.getTopology() : null;
+
+    const experimentData = {
+      platform: 'NEUROCORE Adaptive Event-Driven Neuromorphic Computing Platform',
+      version: '2.1.0',
+      timestamp: new Date().toISOString(),
+      experimentMetadata: {
+        id: `EXP-NC-${simConfig.seed}-${Date.now().toString(36).toUpperCase()}`,
+        engine: 'SimulationEngine (Mulberry32 PRNG)',
+        model: 'Leaky Integrate-and-Fire (LIF)',
+      },
+      configuration: {
+        seed: simConfig.seed,
+        seedHex: '0x' + (Number(simConfig.seed) >>> 0).toString(16).toUpperCase().padStart(8, '0'),
+        neuronCount: simConfig.neuronCount,
+        connectionDensity: topo ? topo.connectionDensity : 0.18,
+        totalSynapses: topo ? topo.connectionCount : 0,
+        inputSparsity: simConfig.sparsity / 100,
+        sparsityPercentage: `${simConfig.sparsity}%`,
+        firingThreshold: simConfig.threshold,
+        currentAdaptiveThreshold: state.currentThreshold ?? simConfig.threshold,
+        simulationSteps: simConfig.steps,
+        executionMode: simConfig.mode,
+        adaptivePolicies: {
+          adaptiveThreshold: simConfig.adaptiveThreshold,
+          adaptiveTemporal: simConfig.adaptiveTemporal,
+        },
+        speedMultiplier: simConfig.speedMultiplier,
+      },
+      topologySummary: topo ? {
+        neuronCount: topo.neuronCount,
+        connectionCount: topo.connectionCount,
+        density: topo.connectionDensity,
+        sampleConnections: topo.connections.slice(0, 50),
+      } : null,
+      runtimeMetrics: {
+        evaluatedSteps: state.step,
+        totalSpikesFired: state.spikeCount,
+        scheduledSynapticEvents: state.scheduledEvents,
+        deliveredSynapticEvents: state.deliveredEvents,
+        pendingEventsInQueue: state.pendingEvents,
+        neuronStateUpdates: state.updateCount,
+        activeNeuronCount: state.activeCount,
+        inactiveNeuronCount: state.inactiveCount,
+        finalStepSpikes: state.spiked,
+        spikeFrequencies: state.spikeFrequency,
+        thresholdHistory: state.thresholdHistory,
+      },
+    };
+
+    const jsonString = JSON.stringify(experimentData, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `neurocore-experiment-seed-${simConfig.seed}-steps-${state.step || simConfig.steps}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    toast(`Exported experiment config for seed ${simConfig.seed}.`);
+  }
+
+  $('#exportExperimentJson')?.addEventListener('click', exportExperimentJSON);
+
   $('#neuronCount')?.addEventListener('input', e => {
     simConfig.neuronCount = parseInt(e.target.value, 10);
     syncControlOutputs();
@@ -625,7 +777,10 @@
     $('#simSpeed').value = '1';
     $('#adaptiveThreshold').checked = false;
     $('#adaptiveTemporal').checked = false;
+    const seedInput = $('#experimentSeed');
+    if (seedInput) seedInput.value = 42;
 
+    simConfig.seed = 42;
     simConfig.neuronCount = 48;
     simConfig.sparsity = 70;
     simConfig.threshold = 0.65;

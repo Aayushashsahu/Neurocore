@@ -123,11 +123,12 @@
     #neuronId = 0;
 
     // cached data
-    #potentials   = [];
-    #threshold    = 0.8;
-    #resetVoltage = 0.2;
-    #spikeTimes   = [];
-    #currentStep  = 0;
+    #potentials        = [];
+    #threshold         = 0.65;
+    #thresholdHistory  = [];
+    #resetVoltage      = 0.0;
+    #spikeTimes        = [];
+    #currentStep       = 0;
 
     /**
      * Create a MembranePotentialChart.
@@ -152,9 +153,10 @@
 
     /** Clear all data and repaint blank chart. */
     clear() {
-      this.#potentials  = [];
-      this.#spikeTimes  = [];
-      this.#currentStep = 0;
+      this.#potentials        = [];
+      this.#thresholdHistory  = [];
+      this.#spikeTimes        = [];
+      this.#currentStep       = 0;
       this.#draw();
     }
 
@@ -171,17 +173,19 @@
      * Push new simulation frame data and redraw.
      * @param {object} data
      * @param {number[]} data.potentials  - Full potential history array.
-     * @param {number}   data.threshold
-     * @param {number}   data.resetVoltage
-     * @param {number[]} data.spikeTimes  - Step indices where spikes occurred.
-     * @param {number}   data.currentStep
+     * @param {number}   [data.threshold]
+     * @param {number[]} [data.thresholdHistory] - Dynamic threshold trajectory array.
+     * @param {number}   [data.resetVoltage]
+     * @param {number[]} [data.spikeTimes]  - Step indices where spikes occurred.
+     * @param {number}   [data.currentStep]
      */
     update(data) {
-      this.#potentials   = data.potentials   ?? this.#potentials;
-      this.#threshold    = data.threshold    ?? this.#threshold;
-      this.#resetVoltage = data.resetVoltage ?? this.#resetVoltage;
-      this.#spikeTimes   = data.spikeTimes   ?? this.#spikeTimes;
-      this.#currentStep  = data.currentStep  ?? this.#currentStep;
+      this.#potentials        = data.potentials        ?? this.#potentials;
+      this.#threshold         = data.threshold         ?? this.#threshold;
+      this.#thresholdHistory  = data.thresholdHistory  ?? this.#thresholdHistory;
+      this.#resetVoltage      = data.resetVoltage      ?? this.#resetVoltage;
+      this.#spikeTimes        = data.spikeTimes        ?? this.#spikeTimes;
+      this.#currentStep       = data.currentStep       ?? this.#currentStep;
       this.#draw();
     }
 
@@ -199,9 +203,7 @@
       // Y grid
       drawYGrid(ctx, pa, [0.0, 0.3, 0.6, 0.9, 1.2], minV, maxV);
 
-      // threshold & reset dashed lines
-      const thY = pa.y + pa.h - ((this.#threshold - minV) / (maxV - minV)) * pa.h;
-      hDash(ctx, pa, thY, C.THRESHOLD);
+      // reset voltage dashed line
       const rvY = pa.y + pa.h - ((this.#resetVoltage - minV) / (maxV - minV)) * pa.h;
       hDash(ctx, pa, rvY, C.RESET_V);
 
@@ -216,6 +218,36 @@
       const stepOffset = this.#currentStep - totalSteps + 1;
       drawXLabels(ctx, pa, winStart + stepOffset, winStart + stepOffset + (winEnd - winStart), winEnd - winStart + 1);
 
+      const stepW = pa.w / Math.max(1, this.windowSize - 1);
+
+      // Dynamic adaptive threshold vs static threshold rendering
+      const thHist = this.#thresholdHistory;
+      const visibleTh = thHist.length > 0 ? thHist.slice(Math.max(0, thHist.length - this.windowSize)) : [];
+      const currentTh = visibleTh.length > 0 ? visibleTh[visibleTh.length - 1] : this.#threshold;
+      const isDynamicThreshold = visibleTh.length > 1 && visibleTh.some(v => Math.abs(v - visibleTh[0]) > 0.001);
+
+      if (isDynamicThreshold) {
+        // Draw dynamic adaptive threshold trajectory curve across time
+        ctx.save();
+        ctx.strokeStyle = C.THRESHOLD;
+        ctx.lineWidth = 1.8;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        for (let i = 0; i < visibleTh.length; i++) {
+          const x = pa.x + i * stepW + 0.5;
+          const thVal = Math.max(minV, Math.min(maxV, visibleTh[i]));
+          const y = pa.y + pa.h - ((thVal - minV) / (maxV - minV)) * pa.h + 0.5;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.restore();
+      } else {
+        // Static threshold mode: clean horizontal dashed line
+        const thY = pa.y + pa.h - ((currentTh - minV) / (maxV - minV)) * pa.h;
+        hDash(ctx, pa, thY, C.THRESHOLD);
+      }
+
       if (visiblePts.length < 2) return;
 
       // membrane potential curve (smooth via quadratic interpolation)
@@ -226,7 +258,6 @@
       ctx.setLineDash([]);
       ctx.beginPath();
 
-      const stepW = pa.w / Math.max(1, this.windowSize - 1);
       for (let i = 0; i < visiblePts.length; i++) {
         const x = pa.x + i * stepW + 0.5;
         const y = pa.y + pa.h - ((visiblePts[i] - minV) / (maxV - minV)) * pa.h + 0.5;
@@ -255,7 +286,7 @@
         const idx = sTime - winStart - stepOffset;
         if (idx < 0 || idx >= visiblePts.length) continue;
         const sx = pa.x + idx * stepW + 0.5;
-        const sv = visiblePts[idx] ?? this.#threshold;
+        const sv = visiblePts[idx] ?? currentTh;
         const sy = pa.y + pa.h - ((sv - minV) / (maxV - minV)) * pa.h + 0.5;
         ctx.beginPath();
         ctx.arc(sx, sy, 4, 0, Math.PI * 2);
@@ -263,14 +294,15 @@
       }
       ctx.restore();
 
-      // neuron ID label
+      // neuron ID & live threshold readout label
       if (this.#neuronId !== undefined) {
         ctx.save();
         ctx.fillStyle = C.TEXT;
         ctx.font = FONT;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
-        ctx.fillText(`Neuron ${this.#neuronId}`, pa.x + 4, pa.y + 2);
+        const thLabel = isDynamicThreshold ? `Vth(t)=${currentTh.toFixed(2)} [ADAPTIVE]` : `Vth=${currentTh.toFixed(2)}`;
+        ctx.fillText(`Neuron ${String(this.#neuronId).padStart(2, '0')} · ${thLabel}`, pa.x + 4, pa.y + 2);
         ctx.restore();
       }
     }
@@ -866,6 +898,7 @@
     #spiked = [];
     #active = [];
     #potentials = [];
+    #resizeObserver = null;
 
     /**
      * @param {HTMLCanvasElement} canvasElement
@@ -873,6 +906,10 @@
     constructor(canvasElement) {
       this.#canvas = canvasElement;
       this.resize();
+      if (window.ResizeObserver && this.#canvas.parentElement) {
+        this.#resizeObserver = new ResizeObserver(() => this.resize());
+        this.#resizeObserver.observe(this.#canvas.parentElement);
+      }
     }
 
     resize() {
@@ -884,9 +921,34 @@
       this.draw();
     }
 
+    /**
+     * Synchronize with actual SNN engine topology.
+     * @param {{ neuronCount: number, connections: Array<{ sourceId: number, targetId: number, weight?: number }> }} topology
+     */
+    setTopology(topology) {
+      if (!topology) return;
+      this.#neuronCount = topology.neuronCount || 48;
+      const rawConnections = topology.connections || [];
+      this.#edges = rawConnections.map(c => ({
+        from: c.sourceId !== undefined ? c.sourceId : c.from,
+        to: c.targetId !== undefined ? c.targetId : c.to,
+        weight: c.weight || 0.2,
+      }));
+      this.#generateLayout();
+      this.draw();
+    }
+
     setNeuronCount(count, connections = null) {
       this.#neuronCount = count || 48;
-      this.#edges = connections || [];
+      if (connections && connections.length > 0) {
+        this.#edges = connections.map(c => ({
+          from: c.sourceId !== undefined ? c.sourceId : c.from,
+          to: c.targetId !== undefined ? c.targetId : c.to,
+          weight: c.weight || 0.2,
+        }));
+      } else {
+        this.#edges = [];
+      }
       this.#generateLayout();
       this.draw();
     }

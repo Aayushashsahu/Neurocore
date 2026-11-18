@@ -13,6 +13,57 @@
 'use strict';
 
 /* ====================================================================
+ *  SeededPRNG — Deterministic Pseudo-Random Number Generator (Mulberry32)
+ * ==================================================================== */
+
+/**
+ * High-performance 32-bit deterministic seeded PRNG.
+ * Ensures reproducible experiment generation, topology synthesis, and
+ * stochastic input sequences across execution cycles.
+ */
+class SeededPRNG {
+  /**
+   * @param {number|string} [seed=42]
+   */
+  constructor(seed = 42) {
+    this.seed = (typeof seed === 'number' ? seed : SeededPRNG.hashString(String(seed))) >>> 0;
+    this._state = this.seed;
+  }
+
+  /**
+   * 32-bit integer string hashing function.
+   * @param {string} str
+   * @returns {number}
+   */
+  static hashString(str) {
+    let h = 1779033703 ^ str.length;
+    for (let i = 0; i < str.length; i++) {
+      h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+      h = (h << 13) | (h >>> 19);
+    }
+    return h >>> 0;
+  }
+
+  /**
+   * Generates a deterministic float in range [0, 1).
+   * @returns {number}
+   */
+  random() {
+    let t = (this._state += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+
+  /**
+   * Resets PRNG state to initial seed.
+   */
+  reset() {
+    this._state = this.seed;
+  }
+}
+
+/* ====================================================================
  *  LIFNeuron — Leaky Integrate-and-Fire neuron model
  * ==================================================================== */
 
@@ -285,6 +336,17 @@ class SimulationEngine {
     this.updateCount = 0;
     /** Total spikes generated this run. */
     this.totalSpikeCount = 0;
+    /** Cumulative synaptic events scheduled into the event queue. */
+    this.scheduledEventCount = 0;
+    /** Cumulative synaptic events delivered to target neurons. */
+    this.deliveredEventCount = 0;
+
+    /** @type {number|string} Experiment seed */
+    this.seed = 42;
+    /** @type {SeededPRNG|null} PRNG for network generation */
+    this.prng = null;
+    /** @type {SeededPRNG|null} PRNG for stochastic input generation */
+    this.inputPRNG = null;
 
     /* ---- recorded data ---- */
     /** @type {Map<number, number[]>} neuronId → potential per step */
@@ -323,9 +385,11 @@ class SimulationEngine {
     /** @private */
     this._runResolve = null;
 
-    /* ---- outgoing connections index (source → connections[]) ---- */
+    /* ---- connection index lookups ---- */
     /** @private @type {Map<number, SynapticConnection[]>} */
     this._outgoing = new Map();
+    /** @private @type {Map<number, SynapticConnection[]>} */
+    this._incoming = new Map();
 
     if (config) {
       this.init(config);
@@ -339,14 +403,15 @@ class SimulationEngine {
   /**
    * Initialise (or re-initialise) the simulation with the given config.
    *
-   * Creates neurons and random synaptic connections according to
-   * `connectionDensity`. Resets all recorded data.
+   * Creates neurons and deterministic synaptic connections according to
+   * `connectionDensity` using a seeded PRNG. Resets all recorded data.
    *
    * @param {SimConfig} [config]
    */
   init(config = {}) {
     let sparsity = config.inputSparsity ?? 0.7;
     if (sparsity > 1) sparsity = sparsity / 100;
+    const seed = config.seed !== undefined ? config.seed : 42;
 
     this.config = {
       neuronCount: 48,
@@ -357,11 +422,17 @@ class SimulationEngine {
       adaptiveThreshold: false,
       adaptiveTemporal: false,
       steps: 30,
+      seed,
       ...config,
       inputSparsity: sparsity,
+      seed,
     };
 
     const cfg = this.config;
+    this.seed = cfg.seed;
+    this.prng = new SeededPRNG(this.seed);
+    this.inputPRNG = new SeededPRNG(typeof this.seed === 'number' ? (this.seed + 1013) : SeededPRNG.hashString(String(this.seed) + '_in'));
+
     this._currentThreshold = cfg.firingThreshold;
 
     // --- neurons ---
@@ -372,22 +443,25 @@ class SimulationEngine {
       );
     }
 
-    // --- random connections ---
+    // --- random connections with deterministic seeded PRNG ---
     this.connections = [];
     this._outgoing = new Map();
+    this._incoming = new Map();
     for (let i = 0; i < cfg.neuronCount; i++) {
       this._outgoing.set(i, []);
+      this._incoming.set(i, []);
     }
 
     for (let src = 0; src < cfg.neuronCount; src++) {
       for (let tgt = 0; tgt < cfg.neuronCount; tgt++) {
         if (src === tgt) continue;
-        if (Math.random() < cfg.connectionDensity) {
-          const weight = 0.05 + Math.random() * 0.45;   // 0.05–0.5
-          const delay = 1 + Math.floor(Math.random() * 3); // 1–3
+        if (this.prng.random() < cfg.connectionDensity) {
+          const weight = 0.05 + this.prng.random() * 0.45;   // 0.05–0.5
+          const delay = 1 + Math.floor(this.prng.random() * 3); // 1–3
           const conn = new SynapticConnection(src, tgt, weight, delay);
           this.connections.push(conn);
           this._outgoing.get(src).push(conn);
+          this._incoming.get(tgt).push(conn);
         }
       }
     }
@@ -401,7 +475,7 @@ class SimulationEngine {
 
   /**
    * Reset all runtime state and recorded data to initial conditions.
-   * Does not alter the network topology or config.
+   * Does not alter the network topology or config. Resets PRNG state.
    */
   reset() {
     this.isRunning = false;
@@ -409,13 +483,17 @@ class SimulationEngine {
     this.currentStep = 0;
     this.updateCount = 0;
     this.totalSpikeCount = 0;
+    this.scheduledEventCount = 0;
+    this.deliveredEventCount = 0;
     this.eventQueue.clear();
+
+    if (this.prng) this.prng.reset();
+    if (this.inputPRNG) this.inputPRNG.reset();
 
     this.membranePotentialHistory = new Map();
     this.spikeRaster = new Map();
     this.spikeFrequency = [];
     this.eventQueueSnapshots = [];
-    this.thresholdHistory = [];
     this.binSizeHistory = [];
     this._binSize = 1;
     this._binAccumulator = new Map();
@@ -423,6 +501,7 @@ class SimulationEngine {
     if (this.config) {
       this._currentThreshold = this.config.firingThreshold;
     }
+    this.thresholdHistory = [this._currentThreshold];
 
     for (const n of this.neurons) {
       n.threshold = this._currentThreshold;
@@ -476,10 +555,11 @@ class SimulationEngine {
 
     // Stochastic external input (inputSparsity = probability that a neuron
     // does NOT receive input, so probability of input = 1 - inputSparsity)
+    // Uses seeded input PRNG for deterministic reproducibility
     const inputProb = 1.0 - cfg.inputSparsity;
     for (const n of this.neurons) {
-      if (Math.random() < inputProb) {
-        const ext = 0.1 + Math.random() * 0.25; // small random current
+      if (this.inputPRNG.random() < inputProb) {
+        const ext = 0.1 + this.inputPRNG.random() * 0.25; // small random current
         inputMap.set(n.id, (inputMap.get(n.id) ?? 0) + ext);
       }
     }
@@ -487,6 +567,7 @@ class SimulationEngine {
     // Process event queue: deliver all events scheduled for this timestep
     while (this.eventQueue.size > 0 && this.eventQueue.peek().time <= step) {
       const ev = this.eventQueue.pop();
+      this.deliveredEventCount++;
       inputMap.set(ev.targetId, (inputMap.get(ev.targetId) ?? 0) + ev.weight);
     }
 
@@ -502,6 +583,7 @@ class SimulationEngine {
         for (const n of this.neurons) {
           this.membranePotentialHistory.get(n.id).push(n.membranePotential);
         }
+        this.thresholdHistory.push(this._currentThreshold);
         this.currentStep++;
         return;
       }
@@ -537,7 +619,7 @@ class SimulationEngine {
         this.spikeRaster.get(n.id).push(step);
         this.totalSpikeCount++;
 
-        // Enqueue post-synaptic events
+        // Enqueue post-synaptic events along actual directed outgoing connections
         const outgoing = this._outgoing.get(n.id);
         if (outgoing) {
           for (const conn of outgoing) {
@@ -547,6 +629,7 @@ class SimulationEngine {
               targetId: conn.targetId,
               weight: conn.weight,
             });
+            this.scheduledEventCount++;
           }
         }
       }
@@ -568,8 +651,8 @@ class SimulationEngine {
       for (const n of this.neurons) {
         n.threshold = this._currentThreshold;
       }
-      this.thresholdHistory.push(this._currentThreshold);
     }
+    this.thresholdHistory.push(this._currentThreshold);
 
     this.currentStep++;
 
@@ -663,8 +746,27 @@ class SimulationEngine {
   }
 
   /* ==================================================================
-   *  getState — snapshot
+   *  getTopology & getState — snapshots
    * ================================================================== */
+
+  /**
+   * Return the actual network topology and connection graph.
+   * @returns {{ neuronCount: number, connectionCount: number, connectionDensity: number, seed: number|string, connections: Array<{ sourceId: number, targetId: number, weight: number, delay: number }> }}
+   */
+  getTopology() {
+    return {
+      neuronCount: this.neurons.length,
+      connectionCount: this.connections.length,
+      connectionDensity: this.config?.connectionDensity ?? 0.3,
+      seed: this.seed,
+      connections: this.connections.map((c) => ({
+        sourceId: c.sourceId,
+        targetId: c.targetId,
+        weight: c.weight,
+        delay: c.delay,
+      })),
+    };
+  }
 
   /**
    * Return a snapshot of the current simulation state.
@@ -710,6 +812,14 @@ class SimulationEngine {
       spikeCount: this.totalSpikeCount,
       updateCount: this.updateCount,
       eventQueueSize: this.eventQueue.size,
+      scheduledEvents: this.scheduledEventCount,
+      deliveredEvents: this.deliveredEventCount,
+      pendingEvents: this.eventQueue.size,
+      currentThreshold: this._currentThreshold,
+      thresholdHistory: this.thresholdHistory.slice(),
+      seed: this.seed,
+      neuronCount: this.neurons.length,
+      connectionCount: this.connections.length,
       spikeRaster: spikeRasterObj,
       membranePotentialHistory: historyObj,
       spikeFrequency: this.spikeFrequency.slice(),
@@ -739,4 +849,6 @@ class SimulationEngine {
  *  Export on window
  * ==================================================================== */
 
+SimulationEngine.SeededPRNG = SeededPRNG;
 window.SimulationEngine = SimulationEngine;
+window.SeededPRNG = SeededPRNG;

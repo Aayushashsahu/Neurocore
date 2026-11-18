@@ -1,6 +1,6 @@
 # NEUROCORE — Adaptive Event-Driven Neuromorphic Computing Platform
 
-**Version:** v2.0.0  
+**Version:** v2.1.0  
 **Status:** Interactive Research Platform Prototype  
 **Live Deployment:** [https://neurocore-gilt.vercel.app/](https://neurocore-gilt.vercel.app/)  
 **Deployment Platform:** Vercel (Static Web Application)
@@ -8,6 +8,35 @@
 NEUROCORE is an interactive scientific computing and visualization platform for exploring event-driven Spiking Neural Networks (SNNs), adaptive neuromorphic computation policies, and hardware-aware edge profiling.
 
 > *"Intelligence that computes only when it matters."*
+
+---
+
+## What's New in v2.1.0
+
+### 1. Synchronized SNN Topology & Directed Spike Propagation
+- **Dynamic Neuron Scaling:** The 3D Simulation Lab visualizer and 2D Neural Activity Map dynamically rebuild to match the actual simulation engine's neuron count ($12$ to $96$ nodes).
+- **Actual Synaptic Graph:** The 3D and 2D visualizations are constructed directly from `SimulationEngine.connections`, reflecting actual directed pre-to-post synaptic connections, weights, and delays.
+- **Strict Directed Spike Propagation:** Spiking pulses travel strictly from pre-synaptic to post-synaptic neurons along actual directed outgoing connections, correctly triggering post-synaptic potentials only upon delivery.
+- **Topology Rebuilding on Configuration Change:** Seamlessly reconstructs when changing network size, preset, or experiment seed.
+
+### 2. Scientifically Grounded Metric Accounting
+- **Actual Event Counters:** Replaced arbitrary synaptic event estimates with exact `scheduledEvents` and `deliveredEvents` counters tracked directly by the event queue.
+- **Precise Dimension & Unit Labels:** Replaced misleading "Hz" and physical millisecond tags with discrete simulation interval metrics: `spikes/step`, `Step {N} (T+{N}.0 ms)`, and distinct tracking of neuron state updates versus total synaptic operations.
+- **Queue State Transparency:** Distinguishes pending events currently buffered in the heap from cumulative delivered synaptic events.
+
+### 3. Dynamic Adaptive Threshold ($V_{th}(t)$) Tracking
+- **Adaptive Threshold Visualization:** The Membrane Potential chart dynamically plots the evolving adaptive threshold trajectory curve $V_{th}(t)$ across time steps when adaptive thresholding is active, while maintaining clean horizontal threshold lines in static mode.
+- **Interactive Neuron Inspection:** Real-time state extraction per inspected neuron with historical potential and threshold tracking.
+
+### 4. Deterministic Reproducibility & Seeded PRNG
+- **Mulberry32 PRNG:** Deterministic 32-bit seeded pseudo-random number generator driving both network connectivity generation and stochastic input sequences.
+- **Seed Control:** User-selectable experiment seed with hexadecimal hash display and one-click randomizer. Identical seeds generate identical network topologies and spike patterns across runs.
+- **JSON Experiment Export:** One-click download of complete experiment configurations and runtime metadata as JSON (`neurocore-experiment-seed-{seed}-steps-{steps}.json`), separate from benchmark CSV files.
+
+### 5. Workstation Reliability & Responsive Observability
+- **Dynamic Status Lifecycle:** Real-time runtime indicator tracking `SNN IDLE`, `SNN RUNNING`, `SNN PAUSED`, and `SNN COMPLETED` states.
+- **Native Canvas Resizing:** Integrated `ResizeObserver` lifecycle management across all chart viewports for crisp rendering on high-DPI displays.
+- **Safe Module Fallbacks:** Graceful degraded mode if WebGL or modules are constrained.
 
 ---
 

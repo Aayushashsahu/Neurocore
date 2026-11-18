@@ -1309,6 +1309,88 @@ img { max-width: 100%; display: block; }
   color: var(--turquoise);
 }
 
+.sw-badge.status-idle {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--muted);
+}
+
+.sw-badge.status-paused {
+  background: rgba(255, 180, 0, 0.08);
+  border-color: rgba(255, 180, 0, 0.3);
+  color: #ffb400;
+}
+
+.sw-badge.status-complete {
+  background: rgba(135, 103, 255, 0.08);
+  border-color: rgba(135, 103, 255, 0.3);
+  color: var(--violet);
+}
+
+.sw-badge .pulse-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--turquoise);
+  margin-right: 5px;
+  animation: pulseLive 1.5s infinite;
+}
+
+.sw-badge .pause-dot,
+.sw-badge .check-dot,
+.sw-badge .idle-dot {
+  display: inline-block;
+  margin-right: 4px;
+  font-size: 8px;
+}
+
+.seed-control-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.seed-input {
+  width: 100%;
+  background: rgba(7, 11, 20, 0.7);
+  border: 1px solid var(--line);
+  color: var(--cyan);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.seed-input:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 8px rgba(0, 217, 255, 0.2);
+}
+
+.seed-rand-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  transition: all 0.2s;
+}
+
+.seed-rand-btn:hover {
+  background: rgba(0, 217, 255, 0.15);
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
 .sw-badge.dim {
   color: var(--faint);
   border-color: rgba(255, 255, 255, 0.05);
@@ -1694,8 +1776,8 @@ img { max-width: 100%; display: block; }
 
 .map-metrics-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
 }
 
 .map-metric-cell {

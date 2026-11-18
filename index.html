@@ -256,7 +256,7 @@
               </div>
             </div>
             <div class="sw-right">
-              <span class="sw-badge status-live"><span class="pulse-dot"></span> SNN RUNTIME ACTIVE</span>
+              <span class="sw-badge status-idle" id="simStatusBadge"><span class="idle-dot">○</span> SNN IDLE</span>
               <span class="sw-badge" id="topbarModeTag">EVENT-DRIVEN SNN</span>
               <span class="sw-badge dim">EXP #NC-SNN-2026-X1</span>
               <span class="sw-badge dim">CPU HOSTED · DEMO</span>
@@ -280,6 +280,9 @@
               </button>
               <button class="btn btn-ghost btn-sp" id="resetSimBtn" title="Reset simulation state">
                 ↺ Reset State
+              </button>
+              <button class="btn btn-secondary btn-sp" id="exportExperimentJson" title="Export experiment configuration & metadata as JSON">
+                <span class="play-icon">⤓</span> Export JSON
               </button>
             </div>
             <div class="sp-controls">
@@ -317,6 +320,18 @@
                   <h3>Network &amp; Input</h3>
                 </div>
                 <button class="reset-button" id="resetSim" title="Reset sliders to defaults">↺</button>
+              </div>
+
+              <!-- Experiment Seed (Deterministic PRNG) -->
+              <div class="control-group compact-group">
+                <div class="control-title">
+                  <label for="experimentSeed">Experiment Seed</label>
+                  <button type="button" class="seed-rand-btn" id="randomSeedBtn" title="Generate Random Deterministic Seed">🎲 Random</button>
+                </div>
+                <div class="seed-control-row">
+                  <input type="number" id="experimentSeed" value="42" min="1" max="999999" class="seed-input" aria-label="Experiment Seed" />
+                </div>
+                <div class="range-labels"><span>Deterministic PRNG</span><span id="seedHashDisplay">0x0000002A</span></div>
               </div>
 
               <!-- Sliders -->
@@ -444,7 +459,7 @@
                   <div class="eyebrow">SPATIAL DISTRIBUTION</div>
                   <h3>Neural Activity Map</h3>
                 </div>
-                <span class="subtle-tag" id="activityRate">0 HZ</span>
+                <span class="subtle-tag" id="activityRate">0.0 SPIKES/STEP</span>
               </div>
 
               <!-- 2D Canvas Map -->
@@ -465,11 +480,15 @@
 
               <div class="map-metrics-grid">
                 <div class="map-metric-cell">
-                  <span>SYNAPTIC OPS</span>
+                  <span>DELIVERED SYNAPSES</span>
                   <strong id="synapticEventsMetric">—</strong>
                 </div>
                 <div class="map-metric-cell">
-                  <span>QUEUE BUFFER</span>
+                  <span>SCHEDULED EVENTS</span>
+                  <strong id="scheduledEventsMetric">—</strong>
+                </div>
+                <div class="map-metric-cell">
+                  <span>PENDING BUFFER</span>
                   <strong id="queueSizeMetric">0 PENDING</strong>
                 </div>
               </div>
