@@ -11,7 +11,7 @@ cd neurocore-platform
 python -m http.server 8000
 ```
 
-Open <http://localhost:8000> in your browser.
+Open <https://neurocore-gilt.vercel.app/> in your browser.
 
 **Option 2 — VS Code:**
 
